@@ -1,6 +1,7 @@
-use crate::Point;
-use crate::Keycode;
-use crate::Event;
+use sdl2::rect::Point;
+use sdl2::keyboard::Keycode;
+use sdl2::event::Event;
+
 
 #[derive(Debug)]
 pub enum Command {

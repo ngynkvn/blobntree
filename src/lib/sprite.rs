@@ -1,5 +1,6 @@
-use crate::Rect;
-use crate::Texture;
+
+use sdl2::rect::Rect;
+use sdl2::render::Texture;
 
 pub struct Sprite<'a> {
     texture: &'a Texture<'a>,
