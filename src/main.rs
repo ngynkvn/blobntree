@@ -1,24 +1,24 @@
 mod lib;
 extern crate sdl2;
 
-
 use sdl2::image::{self, InitFlag, LoadTexture};
 
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
-use sdl2::render::TextureQuery;
 use sdl2::render::{Texture, WindowCanvas};
+use sdl2::render::{TextureCreator, TextureQuery};
+use sdl2::video::WindowContext;
 
-
+use std::collections::HashMap;
 use std::time::Duration;
 use std::time::Instant;
 
-use input::{handle_input};
+use input::handle_input;
 use lib::*;
 use misc::to_string;
 use sprite::Sprite;
 
-
+use crate::lib::sprite::{SpriteConfig, SpriteManager};
 
 struct Position {
     point: Point,
@@ -49,7 +49,8 @@ pub struct Game {
     running: bool,
 }
 
-fn render_game(game: &mut Game, canvas: &mut WindowCanvas, sprite: &mut Sprite) {
+fn render_game(game: &mut Game, canvas: &mut WindowCanvas, sprite: &mut SpriteManager) {
+    let sprite = sprite.get("piskel").unwrap();
     let (texture, rect) = sprite.next_frame();
     let position = Point::new(game.player.position.0, game.player.position.1);
     canvas.set_draw_color(Color::RGB(128, 128, 128));
@@ -84,9 +85,14 @@ pub fn main() -> Result<(), String> {
     let mut canvas = window.into_canvas().build().map_err(to_string)?;
 
     let texture_creator = canvas.texture_creator();
-    let texture = texture_creator.load_texture("piskel.png")?;
 
-    let mut sprite = Sprite::new(&texture, (32, 32));
+    let mut sprite_manager = SpriteManager::new(&texture_creator);
+    sprite_manager.add(SpriteConfig {
+        name: "piskel",
+        path: "piskel.png",
+        width: 32,
+        height: 32,
+    });
 
     canvas.set_draw_color(Color::RGB(255, 0, 0));
     canvas.clear();
@@ -122,7 +128,7 @@ pub fn main() -> Result<(), String> {
         //https://gafferongames.com/post/fix_your_timestep/
         //https://dewitters.com/dewitters-gameloop/
         update_game(&mut game, &mut next_tick);
-        render_game(&mut game, &mut canvas, &mut sprite);
+        render_game(&mut game, &mut canvas, &mut sprite_manager);
 
         let total_elapsed = (Instant::now() - start_system_time).as_secs_f32();
         let fps_game = game.ticks as f32 / total_elapsed;
