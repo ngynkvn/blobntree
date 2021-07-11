@@ -1,53 +1,71 @@
 mod lib;
 extern crate sdl2;
 
-use sdl2::render::TextureQuery;
-use std::error::Error;
 use sdl2::event::Event;
 use sdl2::image::{self, InitFlag, LoadTexture};
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
+use sdl2::render::TextureQuery;
 use sdl2::render::{Texture, TextureCreator, WindowCanvas};
 use sdl2::EventPump;
+use std::error::Error;
 use std::time::Duration;
 use std::time::Instant;
 
+use input::{handle_input, Command};
 use lib::*;
-use input::{Command, handle_event};
-use sprite::Sprite;
 use misc::to_string;
+use sprite::Sprite;
 
+use crate::lib::input::{parse_event, Movement};
 
 struct Position {
     point: Point,
 }
 
-fn render(
-    canvas: &mut WindowCanvas,
-    color: Color,
-    texture: &Texture,
-    sprite_rect: Rect,
-    position: Point,
-) -> Result<(), String> {
-    canvas.set_draw_color(color);
+#[derive(Debug)]
+struct Player {
+    velocity: (i32, i32),
+    position: (i32, i32),
+}
+
+impl Player {
+    fn new() -> Self {
+        Self {
+            velocity: (0, 0),
+            position: (100, 100),
+        }
+    }
+
+    fn update(&mut self) {}
+}
+
+pub struct Game {
+    player: Player,
+    ticks: usize,
+    render_ticks: usize,
+    start_system_time: Instant,
+    running: bool,
+}
+
+fn render_game(game: &mut Game, canvas: &mut WindowCanvas, sprite: &mut Sprite) {
+    let (texture, rect) = sprite.next_frame();
+    let position = Point::new(game.player.position.0, game.player.position.1);
+    canvas.set_draw_color(Color::RGB(128, 128, 128));
     canvas.clear();
 
-    canvas.copy(texture, sprite_rect, Rect::from_center(position, 128, 128))?;
+    let TextureQuery { width, height, .. } = texture.query();
 
-
-    Ok(())
+    canvas
+        .copy(
+            texture,
+            rect,
+            Rect::from_center(position, width * 2, height * 2),
+        )
+        .unwrap();
+    game.render_ticks += 1;
 }
-
-
-fn gravity(position: Point) -> Point {
-    let mut new_y = position.y + 10;
-    if new_y > 500 {
-        new_y = 500;
-    }
-    Point::new(position.x, new_y)
-}
-
 
 pub fn main() -> Result<(), String> {
     let sdl_context = sdl2::init()?;
@@ -63,14 +81,12 @@ pub fn main() -> Result<(), String> {
         .build()
         .map_err(|e| e.to_string())?;
 
-    let mut canvas = window.into_canvas().build().map_err(|e| e.to_string())?;
+    let mut canvas = window.into_canvas().build().map_err(to_string)?;
 
     let texture_creator = canvas.texture_creator();
     let texture = texture_creator.load_texture("piskel.png")?;
 
     let mut sprite = Sprite::new(&texture, (32, 32));
-
-    let mut position = Point::new(100, 100);
 
     canvas.set_draw_color(Color::RGB(255, 0, 0));
     canvas.clear();
@@ -78,82 +94,110 @@ pub fn main() -> Result<(), String> {
 
     let mut event_pump = sdl_context.event_pump()?;
 
-    //https://gafferongames.com/post/fix_your_timestep/
-    //https://dewitters.com/dewitters-gameloop/
-    let mut ticks = 0;
-    let mut render_ticks = 0;
+    // Load a font TODO
+    let mut font = ttf_context.load_font("joystix monospace.ttf", 16)?;
+    font.set_style(sdl2::ttf::FontStyle::BOLD);
+
     // Initial game time.
     let start_system_time = Instant::now();
     let mut next_tick = start_system_time;
 
-    const TICKS_PER_SECOND: u64 = 25;
-    const MAX_FRAMESKIP: u64 = 5;
-    let skip_ticks: Duration = Duration::from_millis(1000 / TICKS_PER_SECOND);
-
-
-    // Load a font TODO
-    let mut font = ttf_context.load_font("joystix monospace.ttf", 16)?;
-    font.set_style(sdl2::ttf::FontStyle::BOLD);
+    let mut game = Game {
+        player: Player::new(),
+        ticks: 0,
+        render_ticks: 0,
+        start_system_time,
+        running: true,
+    };
 
     // render a surface, and convert it to a texture bound to the canvas
 
     loop {
         let now = Instant::now();
-        let mut loops = 0;
-        while Instant::now() > next_tick && loops < MAX_FRAMESKIP {
-            position = gravity(position);
-            next_tick += skip_ticks;
-            loops += 1;
-            ticks += 1;
-        }
-
-        let mut cmd = None;
-
-        event_pump
-            .poll_iter()
-            .map(|event| {
-                let e = handle_event(event, &mut position);
-                cmd = e.or(None);
-            })
-            .last();
-        // println!("{:?}", event);
-        if let Some(Command::Quit) = cmd {
+        handle_input(&mut game, &mut event_pump);
+        if !game.running {
             break;
         }
 
-        let (texture, rect) = sprite.next_frame();
-        render(
-            &mut canvas,
-            Color::RGB(255, 64, 128),
-            &texture,
-            rect,
-            position,
-        )?;
+        //https://gafferongames.com/post/fix_your_timestep/
+        //https://dewitters.com/dewitters-gameloop/
+        update_game(&mut game, &mut next_tick);
+        render_game(&mut game, &mut canvas, &mut sprite);
 
         let total_elapsed = (Instant::now() - start_system_time).as_secs_f32();
-        let fps_game = ticks as f32 / total_elapsed;
-        let fps_render = render_ticks as f32 / total_elapsed;
+        let fps_game = game.ticks as f32 / total_elapsed;
+        let fps_render = game.render_ticks as f32 / total_elapsed;
 
         let surface = font
-            .render(&format!("StateFPS: [{:02.1}] RenderFPS: [{:02.1}] T: {:02.2}", fps_game, fps_render, total_elapsed))
+            .render(&format!(
+                "StateFPS: [{:02.1}] RenderFPS: [{:02.1}] T: {:02.2}",
+                fps_game, fps_render, total_elapsed
+            ))
             .blended(Color::RGBA(255, 255, 255, 255))
             .map_err(to_string)?;
-        let texture = texture_creator.create_texture_from_surface(&surface).map_err(to_string)?;
-        let TextureQuery {width, height, ..} = texture.query();
-        canvas.copy(&texture, None, Some(Rect::new(0, 0, width, height)))?;
+        let debug = texture_creator
+            .create_texture_from_surface(&surface)
+            .map_err(to_string)?;
+        render_debug(&mut game, &mut canvas, &debug);
+
         canvas.present();
 
-        render_ticks += 1;
+        std::thread::sleep(
+            Duration::from_secs_f64(1.0 / 62.0)
+                .checked_sub(Instant::now() - now)
+                .unwrap_or(Duration::ZERO),
+        );
 
-        // ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 15));
-        let elapsed = Instant::now() - start_system_time;
-        let t = render_ticks as f32 / elapsed.as_secs_f32();
-        // Rendering should be capped at 60fps.
-        if Instant::now() - now < Duration::from_millis(1000 / 60) {
-            std::thread::sleep(Duration::from_millis(1000 / 60) - (Instant::now() - now));
-        }
+        // if let Some(Command::Quit) = cmd {
+        //     break;
+        // }
+
         // The rest of the game loop goes here...
     }
+    println!("Exiting");
 
     Ok(())
+}
+
+fn update_game(game: &mut Game, next_tick: &mut Instant) {
+    // update_game(&mut game, &mut next_tick);
+    const TICKS_PER_SECOND: u64 = 30;
+    const MAX_FRAMESKIP: u64 = 5;
+    let skip_ticks: Duration = Duration::from_millis(1000 / TICKS_PER_SECOND);
+    let mut loops = 0;
+    let (mut player_x, mut player_y) = game.player.position;
+    let (mut pv_x, mut pv_y) = game.player.velocity;
+    while Instant::now() > *next_tick && loops < MAX_FRAMESKIP {
+        //player movement
+        pv_x = pv_x.min(20);
+        pv_x = (pv_x as f32 * 0.98) as i32;
+        player_x += pv_x;
+        player_y += pv_y;
+
+        //gravity
+        if player_y > 200 {
+            player_y = 200;
+            pv_y = 0;
+        } else {
+            pv_y += 10;
+        }
+
+        //tick counter
+        *next_tick += skip_ticks;
+        loops += 1;
+        game.ticks += 1;
+    }
+    game.player.velocity = (pv_x, pv_y);
+    game.player.position = (player_x, player_y);
+}
+
+fn render_debug(
+    game: &mut Game,
+    canvas: &mut sdl2::render::Canvas<sdl2::video::Window>,
+    texture: &Texture,
+) -> () {
+    let TextureQuery { width, height, .. } = texture.query();
+    canvas
+        .copy(&texture, None, Some(Rect::new(0, 0, width, height)))
+        .unwrap();
 }

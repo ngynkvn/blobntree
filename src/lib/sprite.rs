@@ -1,4 +1,3 @@
-
 use sdl2::rect::Rect;
 use sdl2::render::Texture;
 
