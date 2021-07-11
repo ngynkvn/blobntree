@@ -1,6 +1,7 @@
 mod lib;
 extern crate sdl2;
 
+use crate::font::FontConfig;
 use sdl2::image::{self, InitFlag, LoadTexture};
 
 use sdl2::pixels::Color;
@@ -13,6 +14,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use std::time::Instant;
 
+use font::FontManager;
 use input::handle_input;
 use lib::*;
 use misc::to_string;
@@ -101,8 +103,12 @@ pub fn main() -> Result<(), String> {
     let mut event_pump = sdl_context.event_pump()?;
 
     // Load a font TODO
-    let mut font = ttf_context.load_font("joystix monospace.ttf", 16)?;
-    font.set_style(sdl2::ttf::FontStyle::BOLD);
+    let mut font_manager = FontManager::new(&texture_creator, &ttf_context);
+    font_manager.add(FontConfig {
+        path: "joystix monospace.ttf",
+        size: 16 ,
+        style: sdl2::ttf::FontStyle::BOLD
+    });
 
     // Initial game time.
     let start_system_time = Instant::now();
@@ -134,17 +140,15 @@ pub fn main() -> Result<(), String> {
         let fps_game = game.ticks as f32 / total_elapsed;
         let fps_render = game.render_ticks as f32 / total_elapsed;
 
-        let surface = font
-            .render(&format!(
+        if let Some(debug) = font_manager.render(
+            "joystix monospace.ttf",
+            &format!(
                 "StateFPS: [{:02.1}] RenderFPS: [{:02.1}] T: {:02.2}",
                 fps_game, fps_render, total_elapsed
-            ))
-            .blended(Color::RGBA(255, 255, 255, 255))
-            .map_err(to_string)?;
-        let debug = texture_creator
-            .create_texture_from_surface(&surface)
-            .map_err(to_string)?;
-        render_debug(&mut game, &mut canvas, &debug);
+            ),
+        ) {
+            render_debug(&mut game, &mut canvas, &debug);
+        }
 
         canvas.present();
 
@@ -154,11 +158,6 @@ pub fn main() -> Result<(), String> {
                 .unwrap_or(Duration::ZERO),
         );
 
-        // if let Some(Command::Quit) = cmd {
-        //     break;
-        // }
-
-        // The rest of the game loop goes here...
     }
     println!("Exiting");
 
