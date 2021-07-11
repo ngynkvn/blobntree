@@ -1,24 +1,24 @@
 mod lib;
 extern crate sdl2;
 
-use sdl2::event::Event;
+
 use sdl2::image::{self, InitFlag, LoadTexture};
-use sdl2::keyboard::Keycode;
+
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
 use sdl2::render::TextureQuery;
-use sdl2::render::{Texture, TextureCreator, WindowCanvas};
-use sdl2::EventPump;
-use std::error::Error;
+use sdl2::render::{Texture, WindowCanvas};
+
+
 use std::time::Duration;
 use std::time::Instant;
 
-use input::{handle_input, Command};
+use input::{handle_input};
 use lib::*;
 use misc::to_string;
 use sprite::Sprite;
 
-use crate::lib::input::{parse_event, Movement};
+
 
 struct Position {
     point: Point,
@@ -192,12 +192,12 @@ fn update_game(game: &mut Game, next_tick: &mut Instant) {
 }
 
 fn render_debug(
-    game: &mut Game,
+    _game: &mut Game,
     canvas: &mut sdl2::render::Canvas<sdl2::video::Window>,
     texture: &Texture,
-) -> () {
+) {
     let TextureQuery { width, height, .. } = texture.query();
     canvas
-        .copy(&texture, None, Some(Rect::new(0, 0, width, height)))
+        .copy(texture, None, Some(Rect::new(0, 0, width, height)))
         .unwrap();
 }

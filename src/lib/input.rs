@@ -1,6 +1,6 @@
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
-use sdl2::rect::Point;
+
 use sdl2::EventPump;
 
 use crate::Game;
@@ -66,7 +66,7 @@ pub fn parse_event(event: Event) -> Option<Command> {
         | Event::KeyDown {
             keycode: Some(Keycode::Escape),
             ..
-        } => return Some(Command::Quit),
+        } => Some(Command::Quit),
         Event::KeyDown {
             keycode: Some(Keycode::Left),
             ..
@@ -83,6 +83,6 @@ pub fn parse_event(event: Event) -> Option<Command> {
             keycode: Some(Keycode::Down),
             ..
         } => Some(Command::PlayerInput(Movement::DOWN)),
-        event => None,
+        _event => None,
     }
 }
