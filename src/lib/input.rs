@@ -20,69 +20,58 @@ pub enum Command {
     Event(Event),
 }
 
-fn is_keydown(event: &Event, keycode: Keycode) -> bool {
-    use sdl2::event::Event::KeyDown;
-    if let KeyDown {
-        keycode: Some(key), ..
-    } = event
-    {
-        &keycode == key
-    } else {
-        false
-    }
+macro_rules! key {
+    ($event: ident on $code: ident) => {
+        Event::$event {
+            keycode: Some(Keycode::$code),
+            ..
+        }
+    };
 }
 
 pub fn handle_input(game: &mut Game, event_pump: &mut EventPump) {
-    for command in event_pump.poll_iter().filter_map(parse_event) {
-        println!("{:?}", command);
+    for command in event_pump.poll_iter() {
         match command {
-            Command::PlayerInput(Movement::UP) => {
+            key!(KeyDown on Up) => {
                 game.player.velocity.1 -= 40;
+                // enter jumping state...
             }
-            Command::PlayerInput(Movement::DOWN) => {}
-            Command::PlayerInput(Movement::LEFT) => {
+            key!(KeyDown on Left) => {
                 if game.player.velocity.0 > 0 {
                     game.player.velocity.0 = -5;
                 }
                 game.player.velocity.0 -= 5;
+                // enter run left.
             }
-            Command::PlayerInput(Movement::RIGHT) => {
+            key!(KeyUp on Left) => {
+                game.player.velocity.0 = -5;
+            }
+            key!(KeyDown on Right) => {
                 if game.player.velocity.0 < 0 {
                     game.player.velocity.0 = 5;
                 }
                 game.player.velocity.0 += 5;
+                // enter run left.
             }
-            Command::Quit => {
+            key!(KeyUp on Right) => {
+                game.player.velocity.0 = 5;
+            }
+            key!(KeyDown on Escape) | Event::Quit { .. } => {
                 game.running = false;
             }
+            // Command::PlayerInput(Movement::LEFT) => {
+            // }
+            // Command::PlayerInput(Movement::RIGHT) => {
+            //     if game.player.velocity.0 < 0 {
+            //         game.player.velocity.0 = 5;
+            //     }
+            //     game.player.velocity.0 += 5;
+            // }
+            // Command::Quit => {
+            //     game.running = false;
+            // }
             _ => {}
         }
     }
-}
-
-pub fn parse_event(event: Event) -> Option<Command> {
-    match event {
-        Event::Quit { .. }
-        | Event::KeyDown {
-            keycode: Some(Keycode::Escape),
-            ..
-        } => Some(Command::Quit),
-        Event::KeyDown {
-            keycode: Some(Keycode::Left),
-            ..
-        } => Some(Command::PlayerInput(Movement::LEFT)),
-        Event::KeyDown {
-            keycode: Some(Keycode::Right),
-            ..
-        } => Some(Command::PlayerInput(Movement::RIGHT)),
-        Event::KeyDown {
-            keycode: Some(Keycode::Up),
-            ..
-        } => Some(Command::PlayerInput(Movement::UP)),
-        Event::KeyDown {
-            keycode: Some(Keycode::Down),
-            ..
-        } => Some(Command::PlayerInput(Movement::DOWN)),
-        _event => None,
-    }
+    event_pump.pump_events();
 }

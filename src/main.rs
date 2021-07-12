@@ -82,7 +82,7 @@ pub fn main() -> Result<(), String> {
         .position_centered()
         .opengl()
         .build()
-        .map_err(|e| e.to_string())?;
+        .map_err(to_string)?;
 
     let mut canvas = window.into_canvas().build().map_err(to_string)?;
 
@@ -151,6 +151,7 @@ pub fn main() -> Result<(), String> {
         }
 
         canvas.present();
+        println!("tick");
 
         std::thread::sleep(
             Duration::from_secs_f64(1.0 / 62.0)
