@@ -2,6 +2,7 @@ mod lib;
 extern crate sdl2;
 
 use crate::font::FontConfig;
+use crate::state::PlayerState;
 use sdl2::image::{self, InitFlag, LoadTexture};
 
 use sdl2::pixels::Color;
@@ -26,45 +27,37 @@ struct Position {
     point: Point,
 }
 
-#[derive(Debug)]
-struct Player {
-    velocity: (i32, i32),
-    position: (i32, i32),
-}
-
-impl Player {
-    fn new() -> Self {
-        Self {
-            velocity: (0, 0),
-            position: (100, 100),
-        }
-    }
-
-    fn update(&mut self) {}
-}
-
 pub struct Game {
-    player: Player,
+    player: PlayerState,
     ticks: usize,
     render_ticks: usize,
     start_system_time: Instant,
     running: bool,
 }
 
-fn render_game(game: &mut Game, canvas: &mut WindowCanvas, sprite: &mut SpriteManager) {
-    let sprite = sprite.get("piskel").unwrap();
-    let (texture, rect) = sprite.next_frame();
-    let position = Point::new(game.player.position.0, game.player.position.1);
-    canvas.set_draw_color(Color::RGB(128, 128, 128));
-    canvas.clear();
+impl Game {
+    fn update(&mut self) {
+        self.player.update();
+    }
+}
 
-    let TextureQuery { width, height, .. } = texture.query();
+fn render_game(
+    game: &mut Game,
+    canvas: &mut WindowCanvas,
+    sprite: &mut SpriteManager,
+    elapsed: Duration,
+) {
+    let sprite = sprite.get("chicken").unwrap();
+    let (texture, rect) = sprite.next_frame(elapsed);
+    let position = Point::new(game.player.position.0, game.player.position.1);
+    canvas.set_draw_color(Color::RGB(0, 0, 0));
+    canvas.clear();
 
     canvas
         .copy(
             texture,
             rect,
-            Rect::from_center(position, width * 2, height * 2),
+            Rect::from_center(position, rect.width() * 3, rect.height() * 3),
         )
         .unwrap();
     game.render_ticks += 1;
@@ -90,10 +83,9 @@ pub fn main() -> Result<(), String> {
 
     let mut sprite_manager = SpriteManager::new(&texture_creator);
     sprite_manager.add(SpriteConfig {
-        name: "piskel",
-        path: "piskel.png",
-        width: 32,
-        height: 32,
+        name: "chicken",
+        path: "sprites/chicken_smear.png",
+        json: "sprites/chicken_smear.json",
     });
 
     canvas.set_draw_color(Color::RGB(255, 0, 0));
@@ -106,8 +98,8 @@ pub fn main() -> Result<(), String> {
     let mut font_manager = FontManager::new(&texture_creator, &ttf_context);
     font_manager.add(FontConfig {
         path: "joystix monospace.ttf",
-        size: 16 ,
-        style: sdl2::ttf::FontStyle::BOLD
+        size: 16,
+        style: sdl2::ttf::FontStyle::BOLD,
     });
 
     // Initial game time.
@@ -115,7 +107,7 @@ pub fn main() -> Result<(), String> {
     let mut next_tick = start_system_time;
 
     let mut game = Game {
-        player: Player::new(),
+        player: PlayerState::new(),
         ticks: 0,
         render_ticks: 0,
         start_system_time,
@@ -124,8 +116,9 @@ pub fn main() -> Result<(), String> {
 
     // render a surface, and convert it to a texture bound to the canvas
 
+    let mut now = Instant::now();
+    let frame_time = Duration::from_secs_f64(1.0 / 60.0);
     loop {
-        let now = Instant::now();
         handle_input(&mut game, &mut event_pump);
         if !game.running {
             break;
@@ -134,7 +127,7 @@ pub fn main() -> Result<(), String> {
         //https://gafferongames.com/post/fix_your_timestep/
         //https://dewitters.com/dewitters-gameloop/
         update_game(&mut game, &mut next_tick);
-        render_game(&mut game, &mut canvas, &mut sprite_manager);
+        render_game(&mut game, &mut canvas, &mut sprite_manager, frame_time);
 
         let total_elapsed = (Instant::now() - start_system_time).as_secs_f32();
         let fps_game = game.ticks as f32 / total_elapsed;
@@ -151,14 +144,13 @@ pub fn main() -> Result<(), String> {
         }
 
         canvas.present();
-        println!("tick");
 
         std::thread::sleep(
             Duration::from_secs_f64(1.0 / 62.0)
                 .checked_sub(Instant::now() - now)
                 .unwrap_or(Duration::ZERO),
         );
-
+        now = Instant::now();
     }
     println!("Exiting");
 
@@ -171,30 +163,13 @@ fn update_game(game: &mut Game, next_tick: &mut Instant) {
     const MAX_FRAMESKIP: u64 = 5;
     let skip_ticks: Duration = Duration::from_millis(1000 / TICKS_PER_SECOND);
     let mut loops = 0;
-    let (mut player_x, mut player_y) = game.player.position;
-    let (mut pv_x, mut pv_y) = game.player.velocity;
     while Instant::now() > *next_tick && loops < MAX_FRAMESKIP {
-        //player movement
-        pv_x = pv_x.min(20);
-        pv_x = (pv_x as f32 * 0.98) as i32;
-        player_x += pv_x;
-        player_y += pv_y;
-
-        //gravity
-        if player_y > 200 {
-            player_y = 200;
-            pv_y = 0;
-        } else {
-            pv_y += 10;
-        }
-
+        game.update();
         //tick counter
         *next_tick += skip_ticks;
         loops += 1;
         game.ticks += 1;
     }
-    game.player.velocity = (pv_x, pv_y);
-    game.player.position = (player_x, player_y);
 }
 
 fn render_debug(
