@@ -1,4 +1,5 @@
 pub mod aesprite;
+pub mod ecs;
 pub mod font;
 pub mod input;
 pub mod misc;
