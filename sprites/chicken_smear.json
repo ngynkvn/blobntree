@@ -116,6 +116,7 @@
   "size": { "w": 96, "h": 34 },
   "scale": "1",
   "frameTags": [
+   { "name": "still", "from": 0, "to": 0, "direction": "forward" },
    { "name": "peck", "from": 0, "to": 5, "direction": "forward" },
    { "name": "run", "from": 6, "to": 11, "direction": "forward" }
   ],
