@@ -60,7 +60,7 @@
     "trimmed": true,
     "spriteSourceSize": { "x": 0, "y": 1, "w": 16, "h": 17 },
     "sourceSize": { "w": 18, "h": 18 },
-    "duration": 50
+    "duration": 100
    },
    {
     "filename": "run1",
@@ -69,7 +69,7 @@
     "trimmed": true,
     "spriteSourceSize": { "x": 0, "y": 1, "w": 16, "h": 17 },
     "sourceSize": { "w": 18, "h": 18 },
-    "duration": 100
+    "duration": 50
    },
    {
     "filename": "run2",
@@ -78,7 +78,7 @@
     "trimmed": true,
     "spriteSourceSize": { "x": 0, "y": 1, "w": 16, "h": 17 },
     "sourceSize": { "w": 18, "h": 18 },
-    "duration": 50
+    "duration": 100
    },
    {
     "filename": "run3",
@@ -87,7 +87,7 @@
     "trimmed": true,
     "spriteSourceSize": { "x": 0, "y": 1, "w": 16, "h": 17 },
     "sourceSize": { "w": 18, "h": 18 },
-    "duration": 100
+    "duration": 50
    },
    {
     "filename": "run4",
@@ -96,20 +96,11 @@
     "trimmed": true,
     "spriteSourceSize": { "x": 0, "y": 1, "w": 16, "h": 17 },
     "sourceSize": { "w": 18, "h": 18 },
-    "duration": 50
+    "duration": 100
    },
    {
     "filename": "run5",
     "frame": { "x": 80, "y": 17, "w": 16, "h": 17 },
-    "rotated": false,
-    "trimmed": true,
-    "spriteSourceSize": { "x": 0, "y": 1, "w": 16, "h": 17 },
-    "sourceSize": { "w": 18, "h": 18 },
-    "duration": 100
-   },
-   {
-    "filename": "run6",
-    "frame": { "x": 96, "y": 17, "w": 16, "h": 17 },
     "rotated": false,
     "trimmed": true,
     "spriteSourceSize": { "x": 0, "y": 1, "w": 16, "h": 17 },
@@ -122,11 +113,11 @@
   "version": "1.x-dev",
   "image": "chicken_smear.png",
   "format": "RGBA8888",
-  "size": { "w": 112, "h": 34 },
+  "size": { "w": 96, "h": 34 },
   "scale": "1",
   "frameTags": [
    { "name": "peck", "from": 0, "to": 5, "direction": "forward" },
-   { "name": "run", "from": 6, "to": 12, "direction": "forward" }
+   { "name": "run", "from": 6, "to": 11, "direction": "forward" }
   ],
   "slices": [
   ]
