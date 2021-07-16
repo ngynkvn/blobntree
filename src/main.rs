@@ -1,9 +1,15 @@
 mod lib;
 extern crate sdl2;
 
+use crate::ecs::Component;
+use crate::ecs::Entity;
+use crate::ecs::System;
+use crate::ecs::World;
 use crate::font::FontConfig;
 use crate::state::PlayerState;
 use sdl2::image::{self, InitFlag, LoadTexture};
+use std::collections::HashSet;
+use std::iter::FromIterator;
 
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
@@ -20,11 +26,62 @@ use input::handle_input;
 use lib::*;
 use misc::to_string;
 use sprite::Sprite;
+use std::any::TypeId;
 
 use crate::lib::sprite::{SpriteConfig, SpriteManager};
 
-struct Position {
-    point: Point,
+struct Velocity(i32, i32);
+struct Position(i32, i32);
+struct SpriteName(&'static str);
+
+impl Component for Velocity {}
+
+impl Component for Position {}
+
+impl Component for SpriteName {}
+
+struct Physics {}
+
+impl System for Physics {
+    fn update<'a>(&mut self, entities: impl Iterator<Item = &'a mut Entity>) {
+        // for e in entities {
+        // }
+    }
+}
+
+struct Renderer<'a, 's> {
+    sprite_manager: &'s mut SpriteManager<'a>,
+    canvas: &'a mut WindowCanvas,
+}
+
+impl<'s, 'a> System for Renderer<'a, 's> {
+    fn update<'b>(&mut self, entities: impl Iterator<Item = &'b mut Entity>) {
+        let mut i = 0;
+        self.canvas.set_draw_color(Color::RGB(0, 0, 0));
+        self.canvas.clear();
+        for entity in entities {
+            i += 1;
+            let name = entity.get::<SpriteName>();
+            let position = entity.get::<Position>();
+            let sprite = self.sprite_manager.get(name.0).unwrap();
+
+            let (texture, rect) = sprite.next_frame(Duration::from_millis(1000 / 180));
+            let position = Point::new(position.0, position.1);
+
+            self.canvas
+                .copy(
+                    texture,
+                    rect,
+                    Rect::from_center(position, rect.width() * 3, rect.height() * 3),
+                )
+                .unwrap();
+        }
+        self.canvas.present();
+    }
+}
+
+fn type_id<T: 'static>() -> TypeId {
+    TypeId::of::<T>()
 }
 
 pub struct Game {
@@ -47,20 +104,6 @@ fn render_game(
     sprite: &mut SpriteManager,
     elapsed: Duration,
 ) {
-    let sprite = sprite.get("chicken").unwrap();
-    let (texture, rect) = sprite.next_frame(elapsed);
-    let position = Point::new(game.player.position.0, game.player.position.1);
-    canvas.set_draw_color(Color::RGB(0, 0, 0));
-    canvas.clear();
-
-    canvas
-        .copy(
-            texture,
-            rect,
-            Rect::from_center(position, rect.width() * 3, rect.height() * 3),
-        )
-        .unwrap();
-    game.render_ticks += 1;
 }
 
 pub fn main() -> Result<(), String> {
@@ -114,8 +157,52 @@ pub fn main() -> Result<(), String> {
         running: true,
     };
 
-    // render a surface, and convert it to a texture bound to the canvas
+    let mut world = World::new();
 
+    world.register::<Position>();
+    world.register::<Velocity>();
+    world.register::<SpriteName>();
+
+    world
+        .create_entity()
+        .with(Velocity(0, 0))
+        .with(Position(100, 100))
+        .with(SpriteName("chicken"))
+        .build();
+
+    world
+        .create_entity()
+        .with(Velocity(0, 0))
+        .with(Position(200, 100))
+        .with(SpriteName("chicken"))
+        .build();
+
+    world
+        .create_entity()
+        .with(Velocity(0, 0))
+        .with(Position(300, 100))
+        .with(SpriteName("chicken"))
+        .build();
+
+    let mut physics = Physics {};
+
+    let mut renderer = Renderer {
+        sprite_manager: &mut sprite_manager,
+        canvas: &mut canvas,
+    };
+    /**
+    // world::register<InputHandler>();
+
+        // .with(InputHandler())
+        .build()
+    loop {
+        world.run_system(InputHandler);
+        world.run_system(UpdateGame);
+        world.run_system(RenderGame);
+    }
+
+     */
+    // render a surface, and convert it to a texture bound to the canvas
     let mut now = Instant::now();
     let frame_time = Duration::from_secs_f64(1.0 / 60.0);
     loop {
@@ -127,23 +214,28 @@ pub fn main() -> Result<(), String> {
         //https://gafferongames.com/post/fix_your_timestep/
         //https://dewitters.com/dewitters-gameloop/
         update_game(&mut game, &mut next_tick);
-        render_game(&mut game, &mut canvas, &mut sprite_manager, frame_time);
+        // world.run_system(&mut physics, &[type_id::<Position>(), type_id::<Velocity>()]);
+        world.run_system(
+            &mut renderer,
+            &[type_id::<Position>(), type_id::<SpriteName>()],
+        );
+        // render_game(&mut game, &mut canvas, &mut sprite_manager, frame_time);
 
         let total_elapsed = (Instant::now() - start_system_time).as_secs_f32();
         let fps_game = game.ticks as f32 / total_elapsed;
         let fps_render = game.render_ticks as f32 / total_elapsed;
 
-        if let Some(debug) = font_manager.render(
-            "joystix monospace.ttf",
-            &format!(
-                "StateFPS: [{:02.1}] RenderFPS: [{:02.1}] T: {:02.2}",
-                fps_game, fps_render, total_elapsed
-            ),
-        ) {
-            render_debug(&mut game, &mut canvas, &debug);
-        }
+        // if let Some(debug) = font_manager.render(
+        //     "joystix monospace.ttf",
+        //     &format!(
+        //         "StateFPS: [{:02.1}] RenderFPS: [{:02.1}] T: {:02.2}",
+        //         fps_game, fps_render, total_elapsed
+        //     ),
+        // ) {
+        //     render_debug(&mut game, &mut canvas, &debug);
+        // }
 
-        canvas.present();
+        // canvas.present();
 
         std::thread::sleep(
             Duration::from_secs_f64(1.0 / 62.0)

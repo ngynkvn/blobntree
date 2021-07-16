@@ -1,3 +1,4 @@
+use crate::ecs::Component;
 use std::collections::HashMap;
 use std::fs::File;
 use std::hash::Hash;
@@ -81,5 +82,8 @@ impl<'a> SpriteManager<'a> {
     }
     pub fn get(&mut self, name: &str) -> Option<&mut Sprite<'a>> {
         self.sprites.get_mut(name)
+    }
+    pub fn take(&mut self, name: &str) -> Sprite<'a> {
+        self.sprites.remove(name).unwrap()
     }
 }
