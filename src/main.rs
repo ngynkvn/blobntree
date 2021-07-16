@@ -40,7 +40,9 @@ impl Component for Position {}
 
 impl Component for SpriteName {}
 
-struct Physics {}
+#[derive(Default)]
+struct Physics {
+}
 
 impl System for Physics {
     fn update<'a>(&mut self, entities: impl Iterator<Item = &'a mut Entity>) {
@@ -163,28 +165,18 @@ pub fn main() -> Result<(), String> {
     world.register::<Velocity>();
     world.register::<SpriteName>();
 
+    for i in 0..10 {
     world
         .create_entity()
-        .with(Velocity(0, 1))
-        .with(Position(100, 100))
+        .with(Velocity(0, 0))
+        .with(Position(i * 50, 50))
         .with(SpriteName("chicken"))
         .build();
 
-    world
-        .create_entity()
-        .with(Velocity(0, 2))
-        .with(Position(200, 100))
-        .with(SpriteName("chicken"))
-        .build();
+    }
 
-    world
-        .create_entity()
-        .with(Velocity(0, 3))
-        .with(Position(300, 100))
-        .with(SpriteName("chicken"))
-        .build();
 
-    let mut physics = Physics {};
+    let mut physics: Physics = Default::default();
 
     let mut renderer = Renderer {
         sprite_manager: &mut sprite_manager,
@@ -258,14 +250,3 @@ pub fn main() -> Result<(), String> {
     Ok(())
 }
 
-
-fn render_debug(
-    _game: &mut Game,
-    canvas: &mut sdl2::render::Canvas<sdl2::video::Window>,
-    texture: &Texture,
-) {
-    let TextureQuery { width, height, .. } = texture.query();
-    canvas
-        .copy(texture, None, Some(Rect::new(0, 0, width, height)))
-        .unwrap();
-}
