@@ -41,8 +41,7 @@ impl Component for Position {}
 impl Component for SpriteName {}
 
 #[derive(Default)]
-struct Physics {
-}
+struct Physics {}
 
 impl System for Physics {
     fn update<'a>(&mut self, entities: impl Iterator<Item = &'a mut Entity>) {
@@ -74,7 +73,7 @@ impl<'s, 'a> System for Renderer<'a, 's> {
             let position = entity.get::<Position>();
             let sprite = self.sprite_manager.get(name.0).unwrap();
 
-            let (texture, rect) = sprite.next_frame(Duration::from_millis(1000 / 180));
+            let (texture, rect) = sprite.next_frame(Duration::from_secs_f64((1.0 / 60.0) / 10.0));
             let position = Point::new(position.0, position.1);
 
             self.canvas
@@ -106,7 +105,6 @@ impl Game {
         self.player.update();
     }
 }
-
 
 pub fn main() -> Result<(), String> {
     let sdl_context = sdl2::init()?;
@@ -165,16 +163,14 @@ pub fn main() -> Result<(), String> {
     world.register::<Velocity>();
     world.register::<SpriteName>();
 
-    for i in 0..10 {
-    world
-        .create_entity()
-        .with(Velocity(0, 0))
-        .with(Position(i * 50, 50))
-        .with(SpriteName("chicken"))
-        .build();
-
+    for i in 0..10000 {
+        world
+            .create_entity()
+            .with(Velocity(0, 1))
+            .with(Position(i * 30, i * 30))
+            .with(SpriteName("chicken"))
+            .build();
     }
-
 
     let mut physics: Physics = Default::default();
 
@@ -210,7 +206,10 @@ pub fn main() -> Result<(), String> {
         let skip_ticks: Duration = Duration::from_millis(1000 / TICKS_PER_SECOND);
         let mut loops = 0;
         while Instant::now() > next_tick && loops < MAX_FRAMESKIP {
-            world.run_system(&mut physics, &[type_id::<Position>(), type_id::<Velocity>()]);
+            world.run_system(
+                &mut physics,
+                &[type_id::<Position>(), type_id::<Velocity>()],
+            );
             //tick counter
             next_tick += skip_ticks;
             loops += 1;
@@ -220,11 +219,19 @@ pub fn main() -> Result<(), String> {
             &mut renderer,
             &[type_id::<Position>(), type_id::<SpriteName>()],
         );
-        // render_game(&mut game, &mut canvas, &mut sprite_manager, frame_time);
+        println!("{:?}", Instant::now() - now);
+        game.render_ticks += 1;
 
         let total_elapsed = (Instant::now() - start_system_time).as_secs_f32();
         let fps_game = game.ticks as f32 / total_elapsed;
         let fps_render = game.render_ticks as f32 / total_elapsed;
+        // println!(
+        //     "{}",
+        //     format!(
+        //         "StateFPS: [{:02.1}] RenderFPS: [{:02.1}] T: {:02.2}",
+        //         fps_game, fps_render, total_elapsed
+        //     )
+        // );
 
         // if let Some(debug) = font_manager.render(
         //     "joystix monospace.ttf",
@@ -249,4 +256,3 @@ pub fn main() -> Result<(), String> {
 
     Ok(())
 }
-
