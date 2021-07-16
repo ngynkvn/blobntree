@@ -44,8 +44,15 @@ struct Physics {}
 
 impl System for Physics {
     fn update<'a>(&mut self, entities: impl Iterator<Item = &'a mut Entity>) {
-        // for e in entities {
-        // }
+        for entity in entities {
+            let Position(x, y) = entity.get::<Position>();
+            let Velocity(vx, vy) = entity.get::<Velocity>();
+            let (x, mut y) = (x + vx, y + vy);
+            if y > 800 {
+                y = 0;
+            }
+            entity.set(Position(x, y));
+        }
     }
 }
 
@@ -98,13 +105,6 @@ impl Game {
     }
 }
 
-fn render_game(
-    game: &mut Game,
-    canvas: &mut WindowCanvas,
-    sprite: &mut SpriteManager,
-    elapsed: Duration,
-) {
-}
 
 pub fn main() -> Result<(), String> {
     let sdl_context = sdl2::init()?;
@@ -165,21 +165,21 @@ pub fn main() -> Result<(), String> {
 
     world
         .create_entity()
-        .with(Velocity(0, 0))
+        .with(Velocity(0, 1))
         .with(Position(100, 100))
         .with(SpriteName("chicken"))
         .build();
 
     world
         .create_entity()
-        .with(Velocity(0, 0))
+        .with(Velocity(0, 2))
         .with(Position(200, 100))
         .with(SpriteName("chicken"))
         .build();
 
     world
         .create_entity()
-        .with(Velocity(0, 0))
+        .with(Velocity(0, 3))
         .with(Position(300, 100))
         .with(SpriteName("chicken"))
         .build();
@@ -213,8 +213,17 @@ pub fn main() -> Result<(), String> {
 
         //https://gafferongames.com/post/fix_your_timestep/
         //https://dewitters.com/dewitters-gameloop/
-        update_game(&mut game, &mut next_tick);
-        // world.run_system(&mut physics, &[type_id::<Position>(), type_id::<Velocity>()]);
+        const TICKS_PER_SECOND: u64 = 30;
+        const MAX_FRAMESKIP: u64 = 5;
+        let skip_ticks: Duration = Duration::from_millis(1000 / TICKS_PER_SECOND);
+        let mut loops = 0;
+        while Instant::now() > next_tick && loops < MAX_FRAMESKIP {
+            world.run_system(&mut physics, &[type_id::<Position>(), type_id::<Velocity>()]);
+            //tick counter
+            next_tick += skip_ticks;
+            loops += 1;
+            game.ticks += 1;
+        }
         world.run_system(
             &mut renderer,
             &[type_id::<Position>(), type_id::<SpriteName>()],
@@ -249,20 +258,6 @@ pub fn main() -> Result<(), String> {
     Ok(())
 }
 
-fn update_game(game: &mut Game, next_tick: &mut Instant) {
-    // update_game(&mut game, &mut next_tick);
-    const TICKS_PER_SECOND: u64 = 30;
-    const MAX_FRAMESKIP: u64 = 5;
-    let skip_ticks: Duration = Duration::from_millis(1000 / TICKS_PER_SECOND);
-    let mut loops = 0;
-    while Instant::now() > *next_tick && loops < MAX_FRAMESKIP {
-        game.update();
-        //tick counter
-        *next_tick += skip_ticks;
-        loops += 1;
-        game.ticks += 1;
-    }
-}
 
 fn render_debug(
     _game: &mut Game,

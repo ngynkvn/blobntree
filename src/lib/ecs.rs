@@ -46,6 +46,10 @@ impl<'a> Entity {
         component.unwrap()
 
     }
+
+    pub fn set<T: Component>(&'a mut self, value: T) {
+        self.components.insert(TypeId::of::<T>(), Box::new(value));
+    }
 }
 
 // World is a base container class that we can register components and entities to.
