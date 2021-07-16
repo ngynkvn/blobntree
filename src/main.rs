@@ -7,6 +7,12 @@ use crate::ecs::System;
 use crate::ecs::World;
 use crate::font::FontConfig;
 use crate::state::PlayerState;
+use crate::systems::InputHandler;
+use crate::systems::InputSystem;
+use crate::systems::Physics;
+use crate::systems::Position;
+use crate::systems::SpriteName;
+use crate::systems::Velocity;
 use sdl2::image::{self, InitFlag, LoadTexture};
 use std::collections::HashSet;
 use std::iter::FromIterator;
@@ -27,66 +33,9 @@ use lib::*;
 use misc::to_string;
 use sprite::Sprite;
 use std::any::TypeId;
+use systems::Renderer;
 
 use crate::lib::sprite::{SpriteConfig, SpriteManager};
-
-struct Velocity(i32, i32);
-struct Position(i32, i32);
-struct SpriteName(&'static str);
-
-impl Component for Velocity {}
-
-impl Component for Position {}
-
-impl Component for SpriteName {}
-
-#[derive(Default)]
-struct Physics {}
-
-impl System for Physics {
-    fn update<'a>(&mut self, entities: impl Iterator<Item = &'a mut Entity>) {
-        for entity in entities {
-            let Position(x, y) = entity.get::<Position>();
-            let Velocity(vx, vy) = entity.get::<Velocity>();
-            let (x, mut y) = (x + vx, y + vy);
-            if y > 800 {
-                y = 0;
-            }
-            entity.set(Position(x, y));
-        }
-    }
-}
-
-struct Renderer<'a, 's> {
-    sprite_manager: &'s mut SpriteManager<'a>,
-    canvas: &'a mut WindowCanvas,
-}
-
-impl<'s, 'a> System for Renderer<'a, 's> {
-    fn update<'b>(&mut self, entities: impl Iterator<Item = &'b mut Entity>) {
-        let mut i = 0;
-        self.canvas.set_draw_color(Color::RGB(0, 0, 0));
-        self.canvas.clear();
-        for entity in entities {
-            i += 1;
-            let name = entity.get::<SpriteName>();
-            let position = entity.get::<Position>();
-            let sprite = self.sprite_manager.get(name.0).unwrap();
-
-            let (texture, rect) = sprite.next_frame(Duration::from_secs_f64((1.0 / 60.0) / 10.0));
-            let position = Point::new(position.0, position.1);
-
-            self.canvas
-                .copy(
-                    texture,
-                    rect,
-                    Rect::from_center(position, rect.width() * 3, rect.height() * 3),
-                )
-                .unwrap();
-        }
-        self.canvas.present();
-    }
-}
 
 fn type_id<T: 'static>() -> TypeId {
     TypeId::of::<T>()
@@ -131,6 +80,12 @@ pub fn main() -> Result<(), String> {
         json: "sprites/chicken_smear.json",
     });
 
+    sprite_manager.add(SpriteConfig {
+        name: "mushroom",
+        path: "sprites/mushroom.png",
+        json: "sprites/mushroom.json",
+    });
+
     canvas.set_draw_color(Color::RGB(255, 0, 0));
     canvas.clear();
     canvas.present();
@@ -158,19 +113,9 @@ pub fn main() -> Result<(), String> {
     };
 
     let mut world = World::new();
-
-    world.register::<Position>();
-    world.register::<Velocity>();
-    world.register::<SpriteName>();
-
-    for i in 0..10000 {
-        world
-            .create_entity()
-            .with(Velocity(0, 1))
-            .with(Position(i * 30, i * 30))
-            .with(SpriteName("chicken"))
-            .build();
-    }
+    let mut player_input = InputSystem {
+        event_pump: &mut event_pump,
+    };
 
     let mut physics: Physics = Default::default();
 
@@ -178,6 +123,29 @@ pub fn main() -> Result<(), String> {
         sprite_manager: &mut sprite_manager,
         canvas: &mut canvas,
     };
+
+    world.register::<Position>();
+    world.register::<Velocity>();
+    world.register::<InputHandler>();
+    world.register::<SpriteName>();
+
+    world
+        .create_entity()
+        .with(Velocity(0, 1))
+        .with(Position(100, 100))
+        .with(SpriteName("mushroom"))
+        .with(InputHandler)
+        .build();
+
+    for i in 0..10 {
+        world
+            .create_entity()
+            .with(Velocity(0, 1))
+            .with(Position(i * 50, i))
+            .with(SpriteName("chicken"))
+            .build();
+    }
+
     /**
     // world::register<InputHandler>();
 
@@ -195,6 +163,10 @@ pub fn main() -> Result<(), String> {
     let frame_time = Duration::from_secs_f64(1.0 / 60.0);
     loop {
         handle_input(&mut game, &mut event_pump);
+        // world.run_system(
+        //     &mut player_input,
+        //     &[type_id::<Velocity>(), type_id::<InputHandler>()],
+        // );
         if !game.running {
             break;
         }
@@ -225,13 +197,13 @@ pub fn main() -> Result<(), String> {
         let total_elapsed = (Instant::now() - start_system_time).as_secs_f32();
         let fps_game = game.ticks as f32 / total_elapsed;
         let fps_render = game.render_ticks as f32 / total_elapsed;
-        // println!(
-        //     "{}",
-        //     format!(
-        //         "StateFPS: [{:02.1}] RenderFPS: [{:02.1}] T: {:02.2}",
-        //         fps_game, fps_render, total_elapsed
-        //     )
-        // );
+        println!(
+            "{}",
+            format!(
+                "StateFPS: [{:02.1}] RenderFPS: [{:02.1}] T: {:02.2}",
+                fps_game, fps_render, total_elapsed
+            )
+        );
 
         // if let Some(debug) = font_manager.render(
         //     "joystix monospace.ttf",
