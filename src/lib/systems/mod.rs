@@ -44,6 +44,7 @@ impl System for Physics {
 pub struct Renderer<'a, 's> {
     pub sprite_manager: &'s mut SpriteManager<'a>,
     pub canvas: &'a mut WindowCanvas,
+    pub now: Instant
 }
 
 impl<'s, 'a> System for Renderer<'a, 's> {
@@ -55,7 +56,7 @@ impl<'s, 'a> System for Renderer<'a, 's> {
             i += 1;
             let state = entity.get::<SpriteState>();
             let position = entity.get::<Position>();
-            let (texture, rect) = self.sprite_manager.next_frame(state.0, Duration::from_secs_f64(1.0 / 60.0));
+            let (texture, rect) = self.sprite_manager.next_frame(state.0, self.now.elapsed());
             let position = Point::new(position.0, position.1);
 
             self.canvas
@@ -67,6 +68,7 @@ impl<'s, 'a> System for Renderer<'a, 's> {
                 .unwrap();
         }
         self.canvas.present();
+        self.now = Instant::now();
     }
 }
 

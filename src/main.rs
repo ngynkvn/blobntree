@@ -122,6 +122,7 @@ pub fn main() -> Result<(), String> {
     let mut renderer = Renderer {
         sprite_manager: &mut sprite_manager,
         canvas: &mut canvas,
+        now: Instant::now(),
     };
 
     world.register::<Position>();
