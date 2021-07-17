@@ -16,7 +16,7 @@ pub type SpriteIndex = usize;
 
 #[derive(Debug)]
 pub struct SpriteState {
-    sprite: String,
+    sprite: &'static str,
     current_frame: usize,
     time: Duration,
 }
@@ -32,8 +32,8 @@ impl<'a> std::fmt::Debug for Sprite<'a> {
     }
 }
 
-impl<'a> From<String> for SpriteState {
-    fn from(sprite: String) -> Self {
+impl<'a> From<&'static str> for SpriteState {
+    fn from(sprite: &'static str) -> Self {
         Self {
             sprite,
             current_frame: 0,
@@ -78,7 +78,7 @@ impl<'a> SpriteManager<'a> {
 
     pub fn next_frame(&mut self, index: SpriteIndex, elapsed: Duration) -> (&Texture, Rect) {
         let state = &mut self.instances[index];
-        let sprite = &self.sprites.get(&state.sprite).unwrap();
+        let sprite = &self.sprites.get(state.sprite).unwrap();
         let frame = state.current_frame;
         let json = &sprite.json;
         let frame_info = &json.frames[frame];
@@ -93,8 +93,7 @@ impl<'a> SpriteManager<'a> {
         (&sprite.texture, frame_info.frame.into())
     }
 
-    // TODO -- This should not need to be a String
-    pub fn init(&mut self, name: String) -> SpriteIndex {
+    pub fn init(&mut self, name: &'static str) -> SpriteIndex {
         self.instances.push(SpriteState::from(name));
         self.instances.len() - 1
     }

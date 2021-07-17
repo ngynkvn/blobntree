@@ -129,13 +129,12 @@ pub fn main() -> Result<(), String> {
     world.register::<InputHandler>();
     world.register::<SpriteState>();
 
-    let sprite_index = renderer.sprite_manager.init("mushroom".to_string());
 
     world
         .create_entity()
         .with(Velocity(0, 1))
         .with(Position(600, 600))
-        .with(SpriteState(renderer.sprite_manager.init("mushroom".to_string())))
+        .with(SpriteState(renderer.sprite_manager.init("mushroom")))
         .with(InputHandler)
         .build();
 
@@ -145,7 +144,7 @@ pub fn main() -> Result<(), String> {
                 .create_entity()
                 .with(Velocity(0, 1))
                 .with(Position(x * 50, y * 50))
-                .with(SpriteState(renderer.sprite_manager.init("chicken".to_string())))
+                .with(SpriteState(renderer.sprite_manager.init("chicken")))
                 .build();
         }
     }
