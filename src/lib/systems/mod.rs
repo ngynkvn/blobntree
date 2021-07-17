@@ -1,8 +1,8 @@
+use crate::ecs::Entities;
 use crate::sprite::SpriteIndex;
-use crate::Instant;
 use crate::Color;
 use crate::Component;
-use crate::Entity;
+use crate::Instant;
 use crate::Point;
 use crate::Rect;
 use crate::SpriteManager;
@@ -28,7 +28,7 @@ impl Component for InputHandler {}
 pub struct Physics {}
 
 impl System for Physics {
-    fn update<'a>(&mut self, entities: impl Iterator<Item = &'a mut Entity>) {
+    fn update<'a>(&mut self, entities: Entities<'a>) {
         for entity in entities {
             let Position(x, y) = entity.get::<Position>();
             let Velocity(vx, vy) = entity.get::<Velocity>();
@@ -44,11 +44,11 @@ impl System for Physics {
 pub struct Renderer<'a, 's> {
     pub sprite_manager: &'s mut SpriteManager<'a>,
     pub canvas: &'a mut WindowCanvas,
-    pub now: Instant
+    pub now: Instant,
 }
 
 impl<'s, 'a> System for Renderer<'a, 's> {
-    fn update<'b>(&mut self, entities: impl Iterator<Item = &'b mut Entity>) {
+    fn update<'b>(&mut self, entities: Entities<'b>) {
         let mut i = 0;
         self.canvas.set_draw_color(Color::RGB(0, 0, 0));
         self.canvas.clear();
@@ -77,7 +77,7 @@ pub struct InputSystem<'a> {
 }
 
 impl<'a> System for InputSystem<'a> {
-    fn update<'b>(&mut self, entities: impl Iterator<Item = &'b mut Entity>) {
+    fn update<'b>(&mut self, entities: Entities<'b>) {
         for entity in entities {}
     }
 }
