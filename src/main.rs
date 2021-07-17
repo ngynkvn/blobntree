@@ -11,7 +11,7 @@ use crate::systems::InputHandler;
 use crate::systems::InputSystem;
 use crate::systems::Physics;
 use crate::systems::Position;
-use crate::systems::SpriteName;
+use crate::systems::SpriteState;
 use crate::systems::Velocity;
 use sdl2::image::{self, InitFlag, LoadTexture};
 use std::collections::HashSet;
@@ -127,23 +127,27 @@ pub fn main() -> Result<(), String> {
     world.register::<Position>();
     world.register::<Velocity>();
     world.register::<InputHandler>();
-    world.register::<SpriteName>();
+    world.register::<SpriteState>();
+
+    let sprite_index = renderer.sprite_manager.init("mushroom".to_string());
 
     world
         .create_entity()
         .with(Velocity(0, 1))
-        .with(Position(100, 100))
-        .with(SpriteName("mushroom"))
+        .with(Position(600, 600))
+        .with(SpriteState(renderer.sprite_manager.init("mushroom".to_string())))
         .with(InputHandler)
         .build();
 
-    for i in 0..10 {
-        world
-            .create_entity()
-            .with(Velocity(0, 1))
-            .with(Position(i * 50, i))
-            .with(SpriteName("chicken"))
-            .build();
+    for x in 0..20 {
+        for y in 0..10 {
+            world
+                .create_entity()
+                .with(Velocity(0, 1))
+                .with(Position(x * 50, y * 50))
+                .with(SpriteState(renderer.sprite_manager.init("chicken".to_string())))
+                .build();
+        }
     }
 
     /**
@@ -189,7 +193,7 @@ pub fn main() -> Result<(), String> {
         }
         world.run_system(
             &mut renderer,
-            &[type_id::<Position>(), type_id::<SpriteName>()],
+            &[type_id::<Position>(), type_id::<SpriteState>()],
         );
         println!("{:?}", Instant::now() - now);
         game.render_ticks += 1;
@@ -224,6 +228,7 @@ pub fn main() -> Result<(), String> {
         );
         now = Instant::now();
     }
+
     println!("Exiting");
 
     Ok(())

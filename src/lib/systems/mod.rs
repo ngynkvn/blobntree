@@ -1,3 +1,5 @@
+use crate::sprite::SpriteIndex;
+use crate::Instant;
 use crate::Color;
 use crate::Component;
 use crate::Entity;
@@ -11,14 +13,14 @@ use sdl2::EventPump;
 
 pub struct Velocity(pub i32, pub i32);
 pub struct Position(pub i32, pub i32);
-pub struct SpriteName(pub &'static str);
+pub struct SpriteState(pub SpriteIndex);
 pub struct InputHandler;
 
 impl Component for Velocity {}
 
 impl Component for Position {}
 
-impl Component for SpriteName {}
+impl Component for SpriteState {}
 
 impl Component for InputHandler {}
 
@@ -51,18 +53,16 @@ impl<'s, 'a> System for Renderer<'a, 's> {
         self.canvas.clear();
         for entity in entities {
             i += 1;
-            let name = entity.get::<SpriteName>();
+            let state = entity.get::<SpriteState>();
             let position = entity.get::<Position>();
-            let sprite = self.sprite_manager.get(name.0).unwrap();
-
-            let (texture, rect) = sprite.next_frame(Duration::from_secs_f64((1.0 / 60.0) / 10.0));
+            let (texture, rect) = self.sprite_manager.next_frame(state.0, Duration::from_secs_f64(1.0 / 60.0));
             let position = Point::new(position.0, position.1);
 
             self.canvas
                 .copy(
                     texture,
                     rect,
-                    Rect::from_center(position, rect.width() * 3, rect.height() * 3),
+                    Rect::from_center(position, rect.width() * 2, rect.height() * 2),
                 )
                 .unwrap();
         }
