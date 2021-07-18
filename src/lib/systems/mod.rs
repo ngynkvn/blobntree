@@ -28,15 +28,16 @@ impl Component for InputHandler {}
 pub struct Physics {}
 
 impl System for Physics {
+    type SystemData = (Position, Velocity);
     fn update<'a>(&mut self, entities: Entities<'a>) {
-        for entity in entities {
-            let Position(x, y) = entity.get::<Position>();
-            let Velocity(vx, vy) = entity.get::<Velocity>();
-            let (x, mut y) = (x + vx, y + vy);
+        for (position, velocity) in entities.query::<(Position, Velocity)>() {
+            let Position(mut x, mut y) = position;
+            let Velocity(vx, vy) = velocity;
+            x += *vx;
+            y += *vy;
             if y > 800 {
                 y = 0;
             }
-            entity.set(Position(x, y));
         }
     }
 }
@@ -47,15 +48,15 @@ pub struct Renderer<'a, 's> {
     pub now: Instant,
 }
 
-impl<'s, 'a> System for Renderer<'a, 's> {
-    fn update<'b>(&mut self, entities: Entities<'b>) {
+impl<'a, 's> System for Renderer<'a, 's> {
+    type SystemData = (Position,  SpriteState);
+
+    fn update<'b>(&mut self, entities: Entities<'b> ) {
         let mut i = 0;
         self.canvas.set_draw_color(Color::RGB(0, 0, 0));
         self.canvas.clear();
-        for entity in entities {
+        for (state, position) in entities.query::<(SpriteState, Position)>() {
             i += 1;
-            let state = entity.get::<SpriteState>();
-            let position = entity.get::<Position>();
             let (texture, rect) = self.sprite_manager.next_frame(state.0, self.now.elapsed());
             let position = Point::new(position.0, position.1);
 
@@ -76,8 +77,9 @@ pub struct InputSystem<'a> {
     pub event_pump: &'a mut EventPump,
 }
 
-impl<'a> System for InputSystem<'a> {
-    fn update<'b>(&mut self, entities: Entities<'b>) {
-        for entity in entities {}
-    }
-}
+// impl<'a> System for InputSystem<'a> {
+//     type SystemData = (Position, Velocity);
+//     fn update<'b>(&mut self, entities: impl Iterator<Item = Self::SystemData>) {
+//         // for entity in entities {}
+//     }
+// }

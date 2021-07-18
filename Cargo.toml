@@ -18,4 +18,3 @@ features = ["image", "ttf"]
 opt-level = 3               # Use slightly better optimizations.
 debug = true
 overflow-checks = false
-lto = "thin"

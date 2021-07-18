@@ -1,14 +1,10 @@
 use crate::HashMap;
-use crate::HashSet;
 use core::any::Any;
-use core::marker::PhantomData;
-use core::mem::take;
 use std::any::TypeId;
-use std::iter::FromIterator;
+use std::cell::RefCell;
 
 type SystemId = TypeId;
 type EntityId = u64;
-type ComponentMap = HashMap<SystemId, Box<dyn Any>>;
 
 pub trait Component: Any {}
 
@@ -19,31 +15,23 @@ pub struct EntityBuilder<'a> {
 
 impl<'a> EntityBuilder<'a> {
     pub fn with<C: Component>(&mut self, component: C) -> &mut Self {
-        let id = self
-            .world
-            .component_types
-            .get(&component.type_id())
-            .unwrap();
-        self.world
-            .components
-            .resize_with(self.world.component_types.len(), Default::default);
-        self.world.components[self.entity.index.index()][*id] = Some(Box::new(component));
+        let component_array = self.world.components.get_mut::<EntityMap<C>>().unwrap();
+        if component_array.0.len() <= self.entity.index() {
+            component_array
+                .0
+                .resize_with(self.entity.index() + 1, Default::default);
+        }
+        component_array.set(self.entity, component);
         self
     }
     pub fn build(&mut self) {
-        // let mut entity = take(&mut self.entity);
-        // entity.component_types = HashSet::from_iter(entity.components.keys().cloned());
-        self.world.entities[self.entity.index.index()] = self.entity;
+        self.world.entities[self.entity.index()] = self.entity;
     }
 }
 
-#[derive(Default)]
-pub struct Entity {
-    index: GenerationalIndex,
-    mask: HashSet<TypeId>,
-}
+pub type Entity = GenerationalIndex;
 
-#[derive(Eq, PartialEq, Clone, Default)]
+#[derive(Eq, PartialEq, Clone, Copy, Default, Debug)]
 pub struct GenerationalIndex {
     index: usize,
     generation: u64,
@@ -76,7 +64,7 @@ impl GenerationalIndexAllocator {
             }
         } else {
             let index = GenerationalIndex {
-                index: self.entries.len() - 1,
+                index: self.entries.len(),
                 generation: 0,
             };
             self.entries.push(AllocatorEntry {
@@ -106,6 +94,60 @@ impl GenerationalIndexAllocator {
     }
 }
 
+#[derive(Clone)]
+struct ArrayEntry<T> {
+    value: T,
+    generation: u64,
+}
+
+// An associative array from GenerationalIndex to some Value T.
+pub struct GenerationalIndexArray<T>(Vec<Option<ArrayEntry<T>>>);
+
+impl<T> GenerationalIndexArray<T> {
+    // Set the value for some generational index.  May overwrite past generation
+    // values.
+    pub fn set(&mut self, index: GenerationalIndex, value: T) {
+        if let Some(mut entry) = self.0[index.index()].as_mut() {
+            entry.value = value
+        }
+    }
+
+    // Gets the value for some generational index, the generation must match.
+    pub fn get(&self, index: GenerationalIndex) -> Option<&T> {
+        self.0[index.index()]
+            .as_ref()
+            .filter(|entry| entry.generation == index.generation)
+            .map(|entry| &entry.value)
+    }
+    pub fn get_mut(&mut self, index: GenerationalIndex) -> Option<&mut T> {
+        self.0[index.index()]
+            .as_mut()
+            .filter(|entry| entry.generation == index.generation)
+            .map(|entry| &mut entry.value)
+    }
+}
+
+type EntityMap<T> = GenerationalIndexArray<T>;
+
+#[derive(Default)]
+pub struct ComponentMap(HashMap<TypeId, Box<dyn Any>>);
+
+impl ComponentMap {
+    fn get<T: Any>(&self) -> Option<&T> {
+        self.0
+            .get(&TypeId::of::<T>())
+            .map(|b| b.downcast_ref::<T>().unwrap())
+    }
+    fn get_mut<T: Any>(&mut self) -> Option<&mut T> {
+        self.0
+            .get_mut(&TypeId::of::<T>())
+            .map(|b| b.as_mut().downcast_mut::<T>().unwrap())
+    }
+    fn insert<T: Any>(&mut self, t: T) {
+        self.0.insert(TypeId::of::<T>(), Box::new(t));
+    }
+}
+
 // World is a base container class that we can register components and entities to.
 #[derive(Default)]
 pub struct World {
@@ -114,12 +156,13 @@ pub struct World {
     component_types: HashMap<TypeId, usize>,
     entities: Vec<Entity>,
     allocator: GenerationalIndexAllocator,
-    components: Vec<Vec<Option<Box<dyn Component>>>>,
+    components: ComponentMap,
 }
 
 // System
 
 pub trait System {
+    type SystemData;
     fn update<'a>(&mut self, entities: Entities<'a>);
 }
 
@@ -131,6 +174,7 @@ impl<'a> World {
     pub fn register<T: 'static>(&mut self) {
         self.component_types
             .insert(TypeId::of::<T>(), self.component_incr);
+        self.components.insert(GenerationalIndexArray::<T>(vec![]));
         self.component_incr += 1;
     }
 
@@ -139,62 +183,40 @@ impl<'a> World {
         if self.entities.len() <= index.index() {
             self.entities
                 .resize_with(index.index() + 1, Default::default);
-            self.components
-                .resize_with(index.index() + 1, Default::default);
         }
         EntityBuilder {
-            entity: Default::default(),
+            entity: index,
             world: self,
         }
     }
 
-    pub fn run_system<'b, S>(&'b mut self, system: &mut S, components: &[TypeId])
+    pub fn run_system<'b, S>(&'b mut self, system: &mut S)
     where
         S: System,
     {
-        let set = HashSet::from_iter(components.iter().cloned());
-        let i = self.entities.iter();
-        let mut matches = i.filter(|entity| entity.mask.is_superset(&set));
-        let entities = Entities {
-            world: self,
-            iter: &mut matches,
-        };
-        system.update(entities)
+        system.update(Entities {
+            entities: &self.entities,
+            components: &mut self.components,
+        })
     }
 }
 
 pub struct Entities<'a> {
-    world: &'a mut World,
-    iter: &'a mut Iterator<Item = &'a Entity>,
+    pub entities: &'a Vec<Entity>,
+    pub components: &'a mut ComponentMap,
 }
 
-pub struct EntityRef<'a> {
-    types: HashMap<TypeId, usize>,
-    components: &'a mut Vec<Option<Box<dyn Component>>>,
-}
-
-impl<'a> EntityRef<'a> {
-    pub fn get<T: Component>(&'a self) -> &'a T {
-        let id = self.types.get(&TypeId::of::<T>()).unwrap();
-        let component = self.components[*id].unwrap();
-        let component = component.downcast_ref();
-        component.unwrap()
+impl<'a> Entities<'a> {
+    pub fn query<D: Join>(&'a mut self) -> impl Iterator<Item = D::Type> {
+        let iter = self
+            .entities
+            .iter()
+            .filter_map(|&entity| D::get(self.components, entity));
+        iter
     }
-
-    // pub fn set<T: Component>(&'a mut self, value: T) {
-    //     self.components.insert(TypeId::of::<T>(), Box::new(value));
-    // }
 }
 
-impl<'a> Iterator for Entities<'a> {
-    type Item = EntityRef<'a>;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|entity| EntityRef {
-            types: self.world.component_types,
-            components: self
-                .world
-                .components
-                .get_unchecked_mut(entity.index.index()),
-        })
-    }
+pub trait Join {
+    type Type;
+    fn get(map: &mut ComponentMap, entity: Entity) -> Self::Type;
 }

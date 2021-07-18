@@ -183,8 +183,7 @@ pub fn main() -> Result<(), String> {
         let mut loops = 0;
         while Instant::now() > next_tick && loops < MAX_FRAMESKIP {
             world.run_system(
-                &mut physics,
-                &[type_id::<Position>(), type_id::<Velocity>()],
+                &mut physics
             );
             //tick counter
             next_tick += skip_ticks;
@@ -192,8 +191,7 @@ pub fn main() -> Result<(), String> {
             game.ticks += 1;
         }
         world.run_system(
-            &mut renderer,
-            &[type_id::<Position>(), type_id::<SpriteState>()],
+            &mut renderer
         );
         println!("{:?}", Instant::now() - now);
         game.render_ticks += 1;
