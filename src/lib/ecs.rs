@@ -2,6 +2,7 @@ use crate::HashMap;
 use core::any::Any;
 use std::any::TypeId;
 use std::cell::RefCell;
+use std::marker::PhantomData;
 
 type SystemId = TypeId;
 type EntityId = u64;
@@ -15,7 +16,7 @@ pub struct EntityBuilder<'a> {
 
 impl<'a> EntityBuilder<'a> {
     pub fn with<C: Component>(&mut self, component: C) -> &mut Self {
-        let component_array = self.world.components.get_mut::<EntityMap<C>>().unwrap();
+        let component_array = self.world.components.get_mut::<EntityMap<C>>();
         if component_array.0.len() <= self.entity.index() {
             component_array
                 .0
@@ -133,15 +134,21 @@ type EntityMap<T> = GenerationalIndexArray<T>;
 pub struct ComponentMap(HashMap<TypeId, Box<dyn Any>>);
 
 impl ComponentMap {
-    fn get<T: Any>(&self) -> Option<&T> {
+    fn get<T: Any>(&self) -> &T {
         self.0
             .get(&TypeId::of::<T>())
-            .map(|b| b.downcast_ref::<T>().unwrap())
+            .unwrap()
+            .as_ref()
+            .downcast_ref::<T>()
+            .unwrap()
     }
-    fn get_mut<T: Any>(&mut self) -> Option<&mut T> {
+    fn get_mut<T: Any>(&mut self) -> &mut T {
         self.0
             .get_mut(&TypeId::of::<T>())
-            .map(|b| b.as_mut().downcast_mut::<T>().unwrap())
+            .unwrap()
+            .as_mut()
+            .downcast_mut::<T>()
+            .unwrap()
     }
     fn insert<T: Any>(&mut self, t: T) {
         self.0.insert(TypeId::of::<T>(), Box::new(t));
@@ -161,9 +168,9 @@ pub struct World {
 
 // System
 
-pub trait System {
-    type SystemData;
-    fn update<'a>(&mut self, entities: Entities<'a>);
+pub trait System<'a> {
+    type SystemData: Join<'a>;
+    fn update(&mut self, entities: Entities<'a, Self::SystemData>);
 }
 
 impl<'a> World {
@@ -190,33 +197,57 @@ impl<'a> World {
         }
     }
 
-    pub fn run_system<'b, S>(&'b mut self, system: &mut S)
+    pub fn run_system<'b, S, D>(&'b mut self, system: &mut S)
     where
-        S: System,
+        D: Join<'a>,
+        S: System<'a, SystemData = D>,
+        'b: 'a,
     {
-        system.update(Entities {
+        system.update(Entities::<'a> {
             entities: &self.entities,
             components: &mut self.components,
+            _m: PhantomData,
         })
     }
 }
 
-pub struct Entities<'a> {
+pub struct Entities<'a, D: Join<'a>> {
     pub entities: &'a Vec<Entity>,
     pub components: &'a mut ComponentMap,
+    _m: PhantomData<D>,
 }
 
-impl<'a> Entities<'a> {
-    pub fn query<D: Join>(&'a mut self) -> impl Iterator<Item = D::Type> {
-        let iter = self
-            .entities
-            .iter()
-            .filter_map(|&entity| D::get(self.components, entity));
-        iter
+pub fn join<'a, D: Join<'a>>(map: &'a mut ComponentMap, entity: Entity) -> Option<D::Type> {
+    D::get(map, entity)
+}
+
+
+pub trait Join<'a> {
+    type Type;
+    fn get(map: &'a mut ComponentMap, entity: Entity) -> Option<Self::Type>;
+}
+
+impl<'a, T> Join<'a> for (T,) where
+T: Component {
+    type Type = &'a mut T;
+    fn get(map: &'a mut ComponentMap, entity: Entity) -> Option<Self::Type> {
+        map.get_mut::<EntityMap<T>>().get_mut(entity)
     }
 }
 
-pub trait Join {
-    type Type;
-    fn get(map: &mut ComponentMap, entity: Entity) -> Self::Type;
-}
+impl<'a, A: Component, B: Component> Join<'a> for (A, B) {
+    type Type = (&'a mut A, &'a mut B);
+    fn get(map: &'a mut ComponentMap, entity: Entity) -> Option<Self::Type> {
+        let result = unsafe {
+            let a = map.get_mut::<EntityMap<A>>() as *mut EntityMap<A>;
+            let a = a.as_mut().unwrap().get_mut(entity);
+            let b = map.get_mut::<EntityMap<B>>() as *mut EntityMap<B>;
+            let b = b.as_mut().unwrap().get_mut(entity);
+            (a, b)
+        };
+            match result {
+                (Some(a), Some(b)) => Some((a, b)),
+                _ => None,
+            }
+        }
+    }
