@@ -1,9 +1,9 @@
-use crate::WindowContext;
 use crate::Color;
 use crate::HashMap;
 use crate::Texture;
 use crate::TextureCreator;
-use crate::WindowCanvas;
+
+use crate::WindowContext;
 use sdl2::ttf::Font;
 use sdl2::ttf::FontStyle;
 use sdl2::ttf::Sdl2TtfContext;
@@ -11,7 +11,7 @@ use sdl2::ttf::Sdl2TtfContext;
 pub struct FontConfig {
     pub path: &'static str,
     pub size: u16,
-    pub style: FontStyle
+    pub style: FontStyle,
 }
 pub struct FontManager<'a> {
     texture_creator: &'a TextureCreator<WindowContext>,

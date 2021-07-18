@@ -1,79 +1,87 @@
-mod lib;
-extern crate sdl2;
-
-use crate::ecs::Component;
-use crate::ecs::Entity;
-use crate::ecs::System;
-use crate::ecs::World;
-use crate::font::FontConfig;
-use crate::state::PlayerState;
-use crate::systems::InputHandler;
-use crate::systems::InputSystem;
-use crate::systems::Physics;
-use crate::systems::Position;
-use crate::systems::SpriteState;
-use crate::systems::Velocity;
-use sdl2::image::{self, InitFlag, LoadTexture};
-use std::collections::HashSet;
-use std::iter::FromIterator;
-
-use sdl2::pixels::Color;
-use sdl2::rect::{Point, Rect};
-use sdl2::render::{Texture, WindowCanvas};
-use sdl2::render::{TextureCreator, TextureQuery};
-use sdl2::video::WindowContext;
-
 use std::collections::HashMap;
 use std::time::Duration;
 use std::time::Instant;
+use systems::components::CollisionType::Static;
+use systems::components::Size;
+use systems::components::SpriteHandle;
+
+use sdl2::pixels::Color;
+use sdl2::render::Texture;
+use sdl2::render::TextureCreator;
+use sdl2::video::WindowContext;
+use specs::prelude::*;
 
 use font::FontManager;
-use input::handle_input;
+use game::Game;
+
+use lib::logging::DisplayError;
 use lib::*;
-use misc::to_string;
-use sprite::Sprite;
-use std::any::TypeId;
-use systems::Renderer;
+use systems::components::InputHandler;
+use systems::components::Position;
+use systems::components::Velocity;
+use systems::input::InputSystem;
+use systems::physics::Physics;
+use systems::renderer::Renderer;
 
-use crate::lib::sprite::{SpriteConfig, SpriteManager};
+use font::FontConfig;
+use sprite::{SpriteConfig, SpriteManager};
+use systems::components::{Collision, StaticSprite};
 
-fn type_id<T: 'static>() -> TypeId {
-    TypeId::of::<T>()
-}
+mod game;
+mod lib;
 
-pub struct Game {
-    player: PlayerState,
-    ticks: usize,
-    render_ticks: usize,
-    start_system_time: Instant,
-    running: bool,
-}
+#[macro_use]
+extern crate lazy_static;
+extern crate image;
+extern crate sdl2;
+#[macro_use]
+extern crate prettytable;
 
-impl Game {
-    fn update(&mut self) {
-        self.player.update();
+fn find_sdl_gl_driver() -> Option<u32> {
+    for (index, item) in sdl2::render::drivers().enumerate() {
+        if item.name == "opengl" {
+            return Some(index as u32);
+        }
     }
+    None
 }
 
-pub fn main() -> Result<(), String> {
-    let sdl_context = sdl2::init()?;
-    let video_subsystem = sdl_context.video()?;
+use color_eyre::Result;
 
-    let ttf_context = sdl2::ttf::init().map_err(|e| e.to_string())?;
-    let _image_context = image::init(InitFlag::PNG | InitFlag::JPG)?;
+pub fn main() -> Result<()> {
+    color_eyre::install()?;
+    use sdl2::image;
+    use sdl2::image::InitFlag;
+    // Always include backtrace on panic.
+    std::env::set_var("RUST_BACKTRACE", "1");
+    let sdl_context = sdl2::init().map_err(DisplayError::from)?;
+    let video_subsystem = sdl_context.video().map_err(DisplayError::from)?;
+
+    let ttf_context = sdl2::ttf::init()?;
+
+    let gl_attr = video_subsystem.gl_attr();
+    gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
+    // gl_attr.set_context_flags().forward_compatible().set();
+    gl_attr.set_context_version(3, 3);
 
     let window = video_subsystem
         .window("rust-sdl2 demo: Video", 800, 600)
         .position_centered()
         .opengl()
-        .build()
-        .map_err(to_string)?;
+        .build()?;
 
-    let mut canvas = window.into_canvas().build().map_err(to_string)?;
+    dbg!(gl_attr.context_profile());
+    dbg!(gl_attr.context_version());
+
+    let mut canvas = window
+        .into_canvas()
+        .index(find_sdl_gl_driver().unwrap())
+        .build()?;
 
     let texture_creator = canvas.texture_creator();
+    let mut event_pump = sdl_context.event_pump().map_err(DisplayError::from)?;
 
-    let mut sprite_manager = SpriteManager::new(&texture_creator);
+    let mut sprite_manager = SpriteManager::new();
     sprite_manager.add(SpriteConfig {
         name: "chicken",
         path: "sprites/chicken_smear.png",
@@ -86,11 +94,12 @@ pub fn main() -> Result<(), String> {
         json: "sprites/mushroom.json",
     });
 
-    canvas.set_draw_color(Color::RGB(255, 0, 0));
-    canvas.clear();
-    canvas.present();
-
-    let mut event_pump = sdl_context.event_pump()?;
+    // TODO -- Some sprites don't have animation data. should be able to specify static sprites.
+    sprite_manager.add(SpriteConfig {
+        name: "tile",
+        path: "sprites/tile.png",
+        json: "sprites/tile.json",
+    });
 
     // Load a font TODO
     let mut font_manager = FontManager::new(&texture_creator, &ttf_context);
@@ -104,8 +113,7 @@ pub fn main() -> Result<(), String> {
     let start_system_time = Instant::now();
     let mut next_tick = start_system_time;
 
-    let mut game = Game {
-        player: PlayerState::new(),
+    let game = Game {
         ticks: 0,
         render_ticks: 0,
         start_system_time,
@@ -113,65 +121,74 @@ pub fn main() -> Result<(), String> {
     };
 
     let mut world = World::new();
-    let mut player_input = InputSystem {
-        event_pump: &mut event_pump,
-    };
+
+    let mut player_input = InputSystem::new(&mut event_pump);
 
     let mut physics: Physics = Default::default();
 
     let mut renderer = Renderer {
         sprite_manager: &mut sprite_manager,
+        font_manager: &mut font_manager,
+        video_subsystem: &video_subsystem,
         canvas: &mut canvas,
+        quad_vao: 0,
+        opengl_textures: HashMap::new(),
         now: Instant::now(),
     };
+    // renderer.prep();
+    renderer.init_render_data();
+    unsafe {
+        let gl_version = std::ffi::CStr::from_ptr(gl::GetString(gl::VERSION) as *const _);
+        dbg!(gl_version);
+    }
 
+    world.insert(game);
     world.register::<Position>();
     world.register::<Velocity>();
+    world.register::<Size>();
     world.register::<InputHandler>();
-    world.register::<SpriteState>();
-
+    world.register::<SpriteHandle>();
+    world.register::<StaticSprite>();
+    world.register::<Collision>();
 
     world
         .create_entity()
-        .with(Velocity(0, 1))
-        .with(Position(600, 600))
-        .with(SpriteState(renderer.sprite_manager.init("mushroom")))
-        .with(InputHandler)
+        .with(Velocity(0, 0))
+        .with(Position(200, 200))
+        .with(Size(50, 50))
+        .with(renderer.sprite_manager.init("chicken"))
+        .with(InputHandler(None))
+        .with(Collision(None))
         .build();
 
-    for x in 0..20 {
-        for y in 0..10 {
+    for x in 1..3 {
+        for y in 1..3 {
             world
                 .create_entity()
                 .with(Velocity(0, 1))
                 .with(Position(x * 50, y * 50))
-                .with(SpriteState(renderer.sprite_manager.init("chicken")))
+                .with(Size(16, 16))
+                .with(Collision(None))
+                .with(renderer.sprite_manager.init("chicken"))
                 .build();
         }
     }
 
-    /**
-    // world::register<InputHandler>();
-
-        // .with(InputHandler())
-        .build()
-    loop {
-        world.run_system(InputHandler);
-        world.run_system(UpdateGame);
-        world.run_system(RenderGame);
+    for x in 0..20 {
+        world
+            .create_entity()
+            .with(Position(x * 32, 400))
+            .with(Size(32, 32))
+            .with(renderer.sprite_manager.init("tile"))
+            .with(Collision(Some(Static)))
+            .build();
     }
-
-     */
     // render a surface, and convert it to a texture bound to the canvas
     let mut now = Instant::now();
-    let frame_time = Duration::from_secs_f64(1.0 / 60.0);
+    let _frame_time = Duration::from_secs_f64(1.0 / 60.0);
     loop {
-        handle_input(&mut game, &mut event_pump);
-        // world.run_system(
-        //     &mut player_input,
-        //     &[type_id::<Velocity>(), type_id::<InputHandler>()],
-        // );
-        if !game.running {
+        player_input.run_now(&world);
+        if !player_input.running {
             break;
         }
 
@@ -182,44 +199,17 @@ pub fn main() -> Result<(), String> {
         let skip_ticks: Duration = Duration::from_millis(1000 / TICKS_PER_SECOND);
         let mut loops = 0;
         while Instant::now() > next_tick && loops < MAX_FRAMESKIP {
-            world.run_system(
-                &mut physics,
-                &[type_id::<Position>(), type_id::<Velocity>()],
-            );
+            physics.run_now(&world);
             //tick counter
             next_tick += skip_ticks;
             loops += 1;
+            let mut game = world.write_resource::<Game>();
             game.ticks += 1;
         }
-        world.run_system(
-            &mut renderer,
-            &[type_id::<Position>(), type_id::<SpriteState>()],
-        );
-        println!("{:?}", Instant::now() - now);
+        renderer.run_now(&world);
+
+        let mut game = world.write_resource::<Game>();
         game.render_ticks += 1;
-
-        let total_elapsed = (Instant::now() - start_system_time).as_secs_f32();
-        let fps_game = game.ticks as f32 / total_elapsed;
-        let fps_render = game.render_ticks as f32 / total_elapsed;
-        println!(
-            "{}",
-            format!(
-                "StateFPS: [{:02.1}] RenderFPS: [{:02.1}] T: {:02.2}",
-                fps_game, fps_render, total_elapsed
-            )
-        );
-
-        // if let Some(debug) = font_manager.render(
-        //     "joystix monospace.ttf",
-        //     &format!(
-        //         "StateFPS: [{:02.1}] RenderFPS: [{:02.1}] T: {:02.2}",
-        //         fps_game, fps_render, total_elapsed
-        //     ),
-        // ) {
-        //     render_debug(&mut game, &mut canvas, &debug);
-        // }
-
-        // canvas.present();
 
         std::thread::sleep(
             Duration::from_secs_f64(1.0 / 62.0)

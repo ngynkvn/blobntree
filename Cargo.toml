@@ -8,14 +8,28 @@ edition = "2018"
 [dependencies]
 serde = { version = "1.0.126", features = ["derive"] }
 serde_json = "1.0"
+nalgebra-glm = "0.14.0"
+num-traits = "0.2.14"
+lazy_static = "1.4.0"
+image = "0.23.14"
+prettytable-rs = "^0.8"
+color-eyre = "0.5.11"
+
+[dependencies.specs]
+version = "0.17.0"
+default-features = false
+features = ["derive"]
 
 [dependencies.sdl2]
 version = "*"
 default-features = false
 features = ["image", "ttf"]
 
+[dependencies.gl]
+git = "https://github.com/bjz/gl-rs"
+
 [profile.dev]
 opt-level = 3               # Use slightly better optimizations.
 debug = true
 overflow-checks = false
-lto = "thin"
+incremental = true
