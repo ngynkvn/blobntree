@@ -1,15 +1,39 @@
-use crate::aseprite::SpriteRect;
 use crate::aseprite::Tags;
-use crate::opengl::texture2d::Texture2D;
+
 use crate::systems::components::SpriteHandle;
 use crate::systems::input::InputState;
 use crate::systems::renderer::TextureInfo;
+use std::marker::PhantomData;
 
 use std::collections::HashMap;
 
 use std::time::Duration;
 
 pub type SpriteIndex = usize;
+
+#[derive(Debug)]
+pub struct StateMachine<T> {
+    pub tags: Vec<Tags>,
+    _t: PhantomData<T>,
+}
+
+impl StateMachine<InputState> {
+    fn run(&mut self, object: InputState) -> Result<&Tags, &str> {
+        println!("You found my state machine!");
+        match object {
+            InputState::Idle => self
+                .tags
+                .iter()
+                .find(|t| t.name == "still")
+                .ok_or("Still tag not found"),
+            InputState::Running => self
+                .tags
+                .iter()
+                .find(|t| t.name == "run")
+                .ok_or("Run tag not found"),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct SpriteState {
@@ -19,12 +43,58 @@ pub struct SpriteState {
     sprite: &'static str,
     time: Duration,
     pub texture: u32,
+    pub state_machine: Option<StateMachine<InputState>>,
+}
+
+use color_eyre::Result;
+use glium::texture::Texture2dArray;
+use glium::uniforms::MagnifySamplerFilter;
+use glium::uniforms::MinifySamplerFilter;
+use glium::uniforms::Sampler;
+use glium::uniforms::SamplerWrapFunction;
+
+trait Ack<T> {
+    fn ack(&mut self, object: T) -> Result<(), &str>;
+}
+
+impl Ack<InputState> for SpriteState {
+    fn ack(&mut self, object: InputState) -> Result<(), &str> {
+        if self.state == object {
+            // Force idempotence on input state object
+            // Ignore states that do not cause change in internal state.
+            return Ok(());
+        } else {
+            self.state = object;
+        }
+        if self.state_machine.is_none() {
+            return Err("The current object does not have an associated state machine with it..");
+        }
+        match self.state_machine.as_mut().unwrap().run(object) {
+            Ok(tag) => {
+                println!("{:?}", tag);
+                self.tag.replace(tag.clone());
+                self.frame_i = tag.from;
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct Sprite {
-    pub texture: Option<Texture2D>,
-    info: TextureInfo,
+    pub texture: Texture2dArray,
+    pub info: TextureInfo,
+}
+
+impl Sprite {
+    pub fn sampler(&self) -> Sampler<Texture2dArray> {
+        self.texture
+            .sampled()
+            .minify_filter(MinifySamplerFilter::Nearest)
+            .magnify_filter(MagnifySamplerFilter::Nearest)
+            .wrap_function(SamplerWrapFunction::Clamp)
+    }
 }
 
 #[derive(Debug)]
@@ -32,6 +102,33 @@ pub struct SpriteConfig {
     pub name: &'static str,
     pub path: &'static str,
     pub json: &'static str,
+}
+
+impl<'a> From<&'a Sprite> for SpriteState {
+    fn from(sprite: &Sprite) -> Self {
+        let mut state = Self {
+            sprite: sprite.info.name,
+            tag: None,
+            frame_i: 0,
+            time: Duration::ZERO,
+            state: InputState::Idle,
+            texture: 0,
+            state_machine: None,
+        };
+        if let Some(tags) = sprite
+            .info
+            .json
+            .as_ref()
+            .map(|json| json.meta.frame_tags.clone())
+        {
+            let sm = StateMachine::<InputState> {
+                tags: tags.to_vec(),
+                _t: PhantomData,
+            };
+            state.state_machine.replace(sm);
+        }
+        state
+    }
 }
 
 impl<'a> From<&'static str> for SpriteState {
@@ -43,28 +140,22 @@ impl<'a> From<&'static str> for SpriteState {
             time: Duration::ZERO,
             state: InputState::Idle,
             texture: 0,
-        }
-    }
-}
-
-impl<'a> From<TextureInfo> for Sprite {
-    fn from(info: TextureInfo) -> Self {
-        Self {
-            texture: None,
-            info,
+            state_machine: None,
         }
     }
 }
 
 pub struct SpriteManager {
     sprites: HashMap<String, Sprite>,
-    loaded_textures: Vec<TextureInfo>,
+    pub loaded_textures: Vec<Sprite>,
     pub instances: Vec<SpriteState>,
 }
 
 pub struct SpriteQuery {
     size: (usize, usize),
 }
+
+type SpriteInfo = ((f32, f32), (f32, f32));
 
 impl SpriteManager {
     pub fn new() -> Self {
@@ -74,47 +165,25 @@ impl SpriteManager {
             instances: Vec::new(),
         }
     }
-    pub fn add(&mut self, config: SpriteConfig) {
-        // let texture = self.texture_creator.load_texture(config.path).unwrap();
-        let name = config.name.clone();
-        let info = TextureInfo::from(config);
-        let sprite = Sprite::from(info.clone());
-        self.sprites.insert(name.to_string(), sprite);
-        self.loaded_textures.push(info);
+    pub fn add(&mut self, sprite: Sprite) {
+        self.sprites.insert(sprite.info.name.to_string(), sprite);
+        // self.loaded_textures.push(sprite);
+    }
+
+    pub fn add_sprites(&mut self, sprites: Vec<Sprite>) {
+        for sprite in sprites {
+            self.add(sprite);
+        }
     }
 
     pub fn signal(&mut self, handle: &SpriteHandle, signal: Option<&InputState>) {
         if let Some(input_state) = signal {
             let state = &mut self.instances[handle.index];
-            if &state.state != input_state {
-                state.state = *input_state;
-                let sprite = self.sprites.get_mut(state.sprite).unwrap();
-                let json = sprite.info.json.as_ref().unwrap();
-                let tags = &json.meta.frame_tags;
-                match state.state {
-                    InputState::Running => {
-                        if let Some(tag) = tags.iter().find(|tag| tag.name == "run") {
-                            println!("{:?}", tag);
-                            state.tag.replace(tag.clone());
-                            state.frame_i = tag.from;
-                        }
-                    }
-                    InputState::Idle => {
-                        if let Some(tag) = tags.iter().find(|tag| tag.name == "still") {
-                            state.tag.replace(tag.clone());
-                            state.frame_i = tag.from;
-                        }
-                    }
-                }
-            }
+            state.ack(*input_state).unwrap();
         }
     }
 
-    pub fn next_frame(
-        &mut self,
-        handle: &SpriteHandle,
-        elapsed: Duration,
-    ) -> (&Texture2D, SpriteRect) {
+    pub fn next_frame(&mut self, handle: &SpriteHandle, elapsed: Duration) -> (&Sprite, usize) {
         let state = &mut self.instances[handle.index];
         let sprite = self.sprites.get_mut(state.sprite).unwrap();
         let frame = state.frame_i;
@@ -134,15 +203,13 @@ impl SpriteManager {
             state.frame_i %= json.frames.len();
             state.time = Duration::ZERO;
         }
-        if sprite.texture.is_none() {
-            sprite.texture = Some(Texture2D::from(sprite.info.clone()));
-        }
-        (sprite.texture.as_ref().unwrap(), frame_info.frame)
+        (sprite, state.frame_i)
     }
 
     // Creates a sprite handle.
     pub fn init(&mut self, name: &'static str) -> SpriteHandle {
-        let state = SpriteState::from(name);
+        let sprite = self.sprites.get(name).unwrap();
+        let state = SpriteState::from(sprite);
         let SpriteQuery {
             size: (width, height),
         } = self.query(&state);
@@ -161,31 +228,6 @@ impl SpriteManager {
         let meta = &json.frames[0];
         SpriteQuery {
             size: (meta.source_size.w, meta.source_size.h),
-        }
-    }
-    pub fn get(&mut self, name: &str) -> Option<&Sprite> {
-        self.sprites.get(name)
-    }
-    pub fn get_instance(&mut self, index: SpriteIndex) -> &mut SpriteState {
-        &mut self.instances[index]
-    }
-    pub fn take(&mut self, name: &str) -> Sprite {
-        self.sprites.remove(name).unwrap()
-    }
-}
-
-impl Drop for SpriteManager {
-    fn drop(&mut self) {
-        let mut texture_ids = vec![];
-        for sprite in self.sprites.values() {
-            // There is an allocated texture here we need to delete.
-            if let Some(texture) = &sprite.texture {
-                texture_ids.push(texture.id);
-            }
-        }
-        unsafe {
-            eprintln!("Deleting {} textures from OpenGL.", texture_ids.len());
-            gl::DeleteTextures(texture_ids.len() as i32, texture_ids.as_ptr());
         }
     }
 }

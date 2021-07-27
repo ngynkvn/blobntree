@@ -3,15 +3,10 @@ use std::time::Duration;
 use std::time::Instant;
 use systems::components::CollisionType::Static;
 use systems::components::Size;
-use systems::components::SpriteHandle;
+use winit::window::WindowBuilder;
 
-use sdl2::pixels::Color;
-use sdl2::render::Texture;
-use sdl2::render::TextureCreator;
-use sdl2::video::WindowContext;
 use specs::prelude::*;
 
-use font::FontManager;
 use game::Game;
 
 use lib::logging::DisplayError;
@@ -23,9 +18,9 @@ use systems::input::InputSystem;
 use systems::physics::Physics;
 use systems::renderer::Renderer;
 
-use font::FontConfig;
+use opengl::DisplayBuild;
 use sprite::{SpriteConfig, SpriteManager};
-use systems::components::{Collision, StaticSprite};
+use systems::components::Collision;
 
 mod game;
 mod lib;
@@ -36,78 +31,65 @@ extern crate image;
 extern crate sdl2;
 #[macro_use]
 extern crate prettytable;
-
-fn find_sdl_gl_driver() -> Option<u32> {
-    for (index, item) in sdl2::render::drivers().enumerate() {
-        if item.name == "opengl" {
-            return Some(index as u32);
-        }
-    }
-    None
-}
+extern crate nalgebra_glm as glm;
 
 use color_eyre::Result;
 
 pub fn main() -> Result<()> {
     color_eyre::install()?;
-    use sdl2::image;
-    use sdl2::image::InitFlag;
+    // winit_main()
+    sdl_main()
+}
+
+pub fn winit_main() -> Result<()> {
+    // Always include backtrace on panic.
+    std::env::set_var("RUST_BACKTRACE", "1");
+    let event_loop = winit::event_loop::EventLoop::new();
+    let _window = WindowBuilder::new()
+        .with_title("winit")
+        .with_inner_size(winit::dpi::LogicalSize::new(800.0, 600.0))
+        .build(&event_loop)?;
+    event_loop.run(move |_event, _, _control_flow| {});
+    Ok(())
+}
+
+pub fn sdl_main() -> Result<()> {
     // Always include backtrace on panic.
     std::env::set_var("RUST_BACKTRACE", "1");
     let sdl_context = sdl2::init().map_err(DisplayError::from)?;
     let video_subsystem = sdl_context.video().map_err(DisplayError::from)?;
 
-    let ttf_context = sdl2::ttf::init()?;
+    let _ttf_context = sdl2::ttf::init()?;
 
     let gl_attr = video_subsystem.gl_attr();
+
+    let egui = egui::CtxRef::default();
     gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
     // gl_attr.set_context_flags().forward_compatible().set();
     gl_attr.set_context_version(3, 3);
 
     let window = video_subsystem
         .window("rust-sdl2 demo: Video", 800, 600)
-        .position_centered()
-        .opengl()
-        .build()?;
+        .build_glium()
+        .unwrap();
 
-    dbg!(gl_attr.context_profile());
-    dbg!(gl_attr.context_version());
+    // let raw = egui::RawInput {
+    //     screen_rect: Some(Rect::from_two_pos(
+    //         Default::default(),
+    //         Pos2::new(800f32, 600f32),
+    //     )),
+    //     pixels_per_point: Some(
+    //         video_subsystem
+    //             .display_dpi(window.display_index().unwrap())
+    //             .unwrap()
+    //             .1,
+    //     ),
+    //     ..Default::default()
+    // };
 
-    let mut canvas = window
-        .into_canvas()
-        .index(find_sdl_gl_driver().unwrap())
-        .build()?;
-
-    let texture_creator = canvas.texture_creator();
     let mut event_pump = sdl_context.event_pump().map_err(DisplayError::from)?;
 
     let mut sprite_manager = SpriteManager::new();
-    sprite_manager.add(SpriteConfig {
-        name: "chicken",
-        path: "sprites/chicken_smear.png",
-        json: "sprites/chicken_smear.json",
-    });
-
-    sprite_manager.add(SpriteConfig {
-        name: "mushroom",
-        path: "sprites/mushroom.png",
-        json: "sprites/mushroom.json",
-    });
-
-    // TODO -- Some sprites don't have animation data. should be able to specify static sprites.
-    sprite_manager.add(SpriteConfig {
-        name: "tile",
-        path: "sprites/tile.png",
-        json: "sprites/tile.json",
-    });
-
-    // Load a font TODO
-    let mut font_manager = FontManager::new(&texture_creator, &ttf_context);
-    font_manager.add(FontConfig {
-        path: "joystix monospace.ttf",
-        size: 16,
-        style: sdl2::ttf::FontStyle::BOLD,
-    });
 
     // Initial game time.
     let start_system_time = Instant::now();
@@ -118,56 +100,47 @@ pub fn main() -> Result<()> {
         render_ticks: 0,
         start_system_time,
         running: true,
+        time: start_system_time,
     };
 
     let mut world = World::new();
 
     let mut player_input = InputSystem::new(&mut event_pump);
+    RunNow::setup(&mut player_input, &mut world);
 
     let mut physics: Physics = Default::default();
+    RunNow::setup(&mut physics, &mut world);
 
     let mut renderer = Renderer {
         sprite_manager: &mut sprite_manager,
-        font_manager: &mut font_manager,
-        video_subsystem: &video_subsystem,
-        canvas: &mut canvas,
-        quad_vao: 0,
-        opengl_textures: HashMap::new(),
-        now: Instant::now(),
+        window,
+        render_set: None,
+        now: start_system_time,
     };
+    RunNow::setup(&mut renderer, &mut world);
     // renderer.prep();
-    renderer.init_render_data();
-    unsafe {
-        let gl_version = std::ffi::CStr::from_ptr(gl::GetString(gl::VERSION) as *const _);
-        dbg!(gl_version);
-    }
 
     world.insert(game);
-    world.register::<Position>();
-    world.register::<Velocity>();
-    world.register::<Size>();
-    world.register::<InputHandler>();
-    world.register::<SpriteHandle>();
-    world.register::<StaticSprite>();
-    world.register::<Collision>();
+    world.insert(egui);
+    // world.insert(raw);
 
     world
         .create_entity()
         .with(Velocity(0, 0))
-        .with(Position(200, 200))
-        .with(Size(50, 50))
+        .with(Position(50, 50))
+        .with(Size(18 * 3, 18 * 3))
         .with(renderer.sprite_manager.init("chicken"))
         .with(InputHandler(None))
         .with(Collision(None))
         .build();
 
-    for x in 1..3 {
-        for y in 1..3 {
+    for x in 1..10 {
+        for y in 1..10 {
             world
                 .create_entity()
                 .with(Velocity(0, 1))
-                .with(Position(x * 50, y * 50))
-                .with(Size(16, 16))
+                .with(Position(x * 18, y * 18))
+                .with(Size(18, 18))
                 .with(Collision(None))
                 .with(renderer.sprite_manager.init("chicken"))
                 .build();

@@ -1,29 +1,44 @@
 use crate::aseprite::AsepriteJSON;
 use crate::aseprite::SpriteRect;
 
-use crate::opengl::shader::Shader;
-use crate::opengl::shader::SHADERS;
-use crate::opengl::texture2d::Texture2D;
-use crate::sprite::SpriteIndex;
-use crate::HashMap;
+use crate::lib::opengl::SDL2Facade;
+use crate::lib::sprite::Sprite;
+
+use glium::implement_vertex;
+use glium::index::PrimitiveType;
+use glium::texture::MipmapsOption::NoMipmap;
+use glium::texture::RawImage2d;
+use glium::texture::Texture2dArray;
+use glium::Blend;
+use glium::IndexBuffer;
+
+use glium::VertexBuffer;
+
+use glium::DrawParameters;
+use glium::Program;
+use glium::Surface;
+
+use glium::uniform;
+
+use image::GenericImageView;
+
+use specs::prelude::*;
+
 use crate::InputHandler;
 use crate::Size;
 use crate::SpriteConfig;
 use crate::Velocity;
-use sdl2::VideoSubsystem;
 
+use std::time::Duration;
 use std::time::Instant;
 
 use num_traits::One;
-use sdl2::rect::Rect;
-use sdl2::render::{TextureQuery, WindowCanvas};
+
 use specs::{Join, ReadStorage, System};
 
-use crate::game::Game;
-use crate::lib::font::FontManager;
 use crate::lib::sprite::SpriteManager;
 use crate::lib::systems::components::{Position, SpriteHandle};
-use crate::lif;
+
 use std::fs::File;
 use std::io::BufReader;
 
@@ -84,159 +99,175 @@ lazy_static! {
         set.push(TextureInfo::new(
             "tile",
             "sprites/tile.png",
-            None,
+            Some("sprites/tile.json"),
         ).unwrap());
         set
     };
 }
 
-pub struct Renderer<'a, 's> {
+#[derive(Clone, Copy)]
+pub struct Vertex {
+    pos: [f32; 2],
+}
+implement_vertex!(Vertex, pos);
+// All relevant OpenGL objects needed for rendering.
+pub struct RenderSet<'a> {
+    pub program: Program,
+    pub projection: glm::Mat4x4,
+    pub vertex_buffer: VertexBuffer<Vertex>,
+    pub index_buffer: IndexBuffer<u16>,
+    pub draw_params: DrawParameters<'a>,
+}
+
+pub struct Renderer<'a> {
     pub sprite_manager: &'a mut SpriteManager,
-    pub font_manager: &'s mut FontManager<'a>,
-    pub video_subsystem: &'s VideoSubsystem,
-    pub canvas: &'a mut WindowCanvas,
-    pub opengl_textures: HashMap<SpriteIndex, Texture2D>,
-    pub quad_vao: u32,
+    pub window: SDL2Facade,
+    pub render_set: Option<RenderSet<'a>>,
     pub now: Instant,
 }
 
-static mut VBO: u32 = 0;
-static mut VAO: u32 = 0;
-
-impl<'a, 's> Renderer<'a, 's> {
-    pub fn init_render_data(&mut self) {
-        gl::load_with(|name| self.video_subsystem.gl_get_proc_address(name) as *const _);
-        self.canvas.window().gl_set_context_to_current().unwrap();
-        let shader = SHADERS.get("world").unwrap();
-        let projection = nalgebra_glm::ortho(0.0, 800.0, 600.0, 0.0, -1.0, 1.0);
-        shader.use_shader();
-        shader.set("image", &(0i32));
-        println!("Image set");
-        shader.set("projection", &projection);
-        println!("Ortho set");
-        // self.sprite_manager.init_texture_data();
-        unsafe {
-            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
-            gl::Enable(gl::BLEND);
-            /*
-            ┌──────────────┐
-            │(0,0)    (1,0)│
-            │              │
-            │              │
-            │              │
-            │              │
-            │              │
-            │(0,1)    (1,1)│
-            └──────────────┘
-            */
-            let vertices: [f32; 24] = [
-                // pos      // tex
-                0.0, 1.0, 0.0, 1.0, //
-                1.0, 0.0, 1.0, 0.0, //
-                0.0, 0.0, 0.0, 0.0, //
-                0.0, 1.0, 0.0, 1.0, //
-                1.0, 1.0, 1.0, 1.0, //
-                1.0, 0.0, 1.0, 0.0, //
-            ];
-            gl::GenVertexArrays(1, &mut self.quad_vao);
-            gl::GenBuffers(1, &mut VBO);
-            dbg!(self.quad_vao);
-            dbg!(VBO);
-
-            gl::BindBuffer(gl::ARRAY_BUFFER, VBO);
-            // Send the vertices to the array buffer VBO.
-            gl::BufferData(
-                gl::ARRAY_BUFFER,
-                (std::mem::size_of::<f32>() * 24) as _,
-                vertices.as_ptr() as *const _,
-                gl::STATIC_DRAW,
-            );
-
-            // Bind the Vertex array
-            gl::BindVertexArray(self.quad_vao);
-            gl::EnableVertexAttribArray(0);
-            gl::VertexAttribPointer(
-                0,
-                4,
-                gl::FLOAT,
-                gl::FALSE,
-                (4 * std::mem::size_of::<f32>()) as _,
-                std::ptr::null(),
-            );
-            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-            gl::BindVertexArray(0);
-
-            // let test_texture = Texture2D::from(TEXTURES[0].clone());
-            // dbg!(&test_texture);
-            // self.opengl_textures.insert(0, test_texture);
+fn load_sprite(display: &SDL2Facade, info: &TextureInfo) -> Sprite {
+    let path = info.path;
+    let image = image::open(path)
+        .unwrap_or_else(|_| panic!("Cannot find {}", path))
+        .to_rgba8();
+    let texture: Texture2dArray = {
+        if let Some(json) = &info.json {
+            let sub_images = json
+                .frames
+                .iter()
+                .map(|frame| {
+                    let SpriteRect { x, y, w, h } = frame.frame;
+                    let sub = image.view(x as u32, y as u32, w, h).to_image();
+                    let dims = sub.dimensions();
+                    let raw = sub.into_raw();
+                    RawImage2d::from_raw_rgba(raw, dims)
+                })
+                .collect();
+            Texture2dArray::with_mipmaps(display, sub_images, NoMipmap).unwrap()
+        } else {
+            let dims = image.dimensions();
+            let raw = image.into_raw();
+            let raw = RawImage2d::from_raw_rgba(raw, dims);
+            Texture2dArray::with_mipmaps(display, vec![raw], NoMipmap).unwrap()
         }
+    };
+    Sprite {
+        texture,
+        info: info.clone(),
+    }
+}
+
+impl<'a> Renderer<'a> {
+    pub fn init_render_data(&mut self, _world: &mut World) {
+        // gl::load_with(|name| self.video_subsystem.gl_get_proc_address(name) as *const _);
+        // self.canvas.window().gl_set_context_to_current().unwrap();
+        let program = Program::from_source(
+            &self.window,
+            include_str!("graphics/world.vert"),
+            include_str!("graphics/world.frag"),
+            None,
+        )
+        .unwrap();
+
+        let sprites = {
+            let textures = &TEXTURES;
+            let mut data = vec![];
+            for texture in textures.iter() {
+                let raw = load_sprite(&self.window, texture);
+                data.push(raw);
+            }
+            data
+        };
+        self.sprite_manager.add_sprites(sprites);
+
+        let quad = [
+            Vertex {
+                pos: [0.0, 1.0], // top left
+            },
+            Vertex {
+                pos: [1.0, 0.0], // bottom right
+            },
+            Vertex {
+                pos: [0.0, 0.0], // bottom left
+            },
+            Vertex {
+                pos: [1.0, 1.0], // top right
+            },
+        ];
+        let vertex_buffer = VertexBuffer::new(&self.window, &quad).unwrap();
+        // building the index buffer
+        let index_buffer = IndexBuffer::new(
+            &self.window,
+            PrimitiveType::TrianglesList,
+            &[0u16, 1, 2, 0, 3, 1],
+        )
+        .unwrap();
+        self.render_set = Some(RenderSet {
+            program,
+            projection: glm::ortho(0.0, 800.0, 600.0, 0.0, -1.0, 1.0),
+            vertex_buffer,
+            index_buffer,
+            draw_params: DrawParameters {
+                blend: Blend::alpha_blending(),
+                ..Default::default()
+            },
+        });
+
         println!("INIT DONE");
     }
 
     fn draw_sprite(
-        quad_vao: u32,
-        texture: &Texture2D,
-        shader: &Shader,
-        (x, y): (i32, i32),
-        size: (f32, f32),
-        frame: SpriteRect,
+        frame: &mut glium::Frame,
+        texture: &Sprite,
+        render_set: &RenderSet,
+        ((x, y), (w, h), frame_index): ((i32, i32), (f32, f32), usize),
     ) {
-        use nalgebra_glm::{scale, translate, vec2, vec3};
-        unsafe {
-            shader.use_shader();
-            let mut model = nalgebra_glm::Mat4x4::one();
-            model = translate(&model, &vec3(x as f32, y as f32, 0.0));
-            model = scale(&model, &vec3(size.0, size.1, 1.0));
-            shader.set("model", &model);
-            // shader.set("tex_offset", &vec2(tx, ty));
-            let SpriteRect { x, y, w, h } = frame;
-            // Sprite top left corner
-            shader.set("sprite_pos", &vec2(x, y));
-            // Sprite width and height
-            shader.set("sprite_dim", &vec2(w as i32, h as i32));
-
-            gl::ActiveTexture(gl::TEXTURE0);
-            assert_ne!(texture.id, 0);
-            texture.bind();
-            gl::BindVertexArray(quad_vao);
-            gl::DrawArrays(gl::TRIANGLES, 0, 6);
-            let error = gl::GetError();
-            if error != 0 {
-                dbg!(error);
-            }
-            gl::BindVertexArray(0);
-        }
+        use nalgebra_glm::{scale, translate, vec3};
+        let mut model = nalgebra_glm::Mat4x4::one();
+        let RenderSet {
+            program,
+            projection,
+            vertex_buffer,
+            index_buffer,
+            draw_params,
+        } = render_set;
+        model = translate(&model, &vec3(x as f32, y as f32, 0.0));
+        model = scale(&model, &vec3(w, h, 1.0));
+        let uniforms = uniform! {
+            model: model.data.0,
+            projection: projection.data.0,
+            image: texture.sampler(),
+            index: frame_index as i32
+        };
+        frame
+            .draw(vertex_buffer, index_buffer, program, &uniforms, draw_params)
+            .unwrap()
     }
-    fn debug_info(&mut self, game: &Game) {
-        let total_elapsed = (Instant::now() - game.start_system_time).as_secs_f32();
-        let fps_game = game.ticks as f32 / total_elapsed;
-        let fps_render = game.render_ticks as f32 / total_elapsed;
-
-        let render = self.font_manager.render(
-            "joystix monospace.ttf",
-            &format!(
-                "StateFPS: [{:02.1}] RenderFPS: [{:02.1}] T: {:02.2}",
-                fps_game, fps_render, total_elapsed
-            ),
-        );
-        lif![Some(debug) = render => {
-            let TextureQuery { width, height, .. } = debug.query();
-            self.canvas
-                .copy(&debug, None, Rect::from((0, 0, width, height))).unwrap();
-        }];
-    }
+    fn _debug_info(&mut self) {}
 }
 
-static mut i: usize = 0;
-impl<'a, 's> System<'s> for Renderer<'a, 's> {
+type EntityData<'s> = (
+    ReadStorage<'s, Position>,
+    ReadStorage<'s, Velocity>,
+    ReadStorage<'s, Size>,
+    ReadStorage<'s, SpriteHandle>,
+    ReadStorage<'s, InputHandler>,
+);
+impl<'a, 's> System<'s> for Renderer<'a> {
     type SystemData = (
-        ReadStorage<'s, Position>,
-        ReadStorage<'s, Velocity>,
-        ReadStorage<'s, Size>,
-        ReadStorage<'s, SpriteHandle>,
-        ReadStorage<'s, InputHandler>,
+        EntityData<'s>,
+        Write<'s, egui::CtxRef>,
+        Read<'s, egui::RawInput>,
     );
-    fn run(&mut self, (position, velocity, size, sprite_handle, input_handler): Self::SystemData) {
+    fn run(
+        &mut self,
+        (
+            (position, velocity, size, sprite_handle, input_handler),
+            _egui_context,
+            _egui_raw_input,
+        ): Self::SystemData,
+    ) {
         let elapsed = self.now.elapsed();
         // given Position and Velocity, calculate the "delta-frame"
         let interpolate = |(x, y): (i32, i32), (vx, vy): (i32, i32)| {
@@ -246,16 +277,10 @@ impl<'a, 's> System<'s> for Renderer<'a, 's> {
             )
         };
 
-        gl::load_with(|name| self.video_subsystem.gl_get_proc_address(name) as *const _);
-        self.canvas.window().gl_set_context_to_current().unwrap();
-
+        let mut target = self.window.draw();
         // Clear Screen
-        unsafe {
-            gl::ClearColor(0.1, 0.1, 0.2, 1.0);
-            gl::Clear(gl::COLOR_BUFFER_BIT);
-        }
-        let shader = SHADERS.get("world").unwrap();
-        let sprite_manager = &mut self.sprite_manager;
+        target.clear_color(0.1, 0.1, 0.2, 1.0);
+
         for (pos, velocity, input, size, handle) in (
             &position,
             velocity.maybe(),
@@ -266,27 +291,41 @@ impl<'a, 's> System<'s> for Renderer<'a, 's> {
             .join()
         {
             let (mut x, mut y) = (pos.0, pos.1);
+
             if let Some(signal) = input {
-                sprite_manager.signal(handle, signal.0.as_ref());
+                self.sprite_manager.signal(handle, signal.0.as_ref());
             }
-            let (texture, next_frame) = sprite_manager.next_frame(handle, elapsed);
+
+            // TODO -- fix timing?
+            let (sprite, frame_index) = self
+                .sprite_manager
+                .next_frame(handle, Duration::from_secs_f64(1.0 / 60.0));
             if let Some(Velocity(vx, vy)) = velocity {
                 let (dx, dy) = interpolate((x, y), (*vx, *vy));
                 x = dx;
                 y = dy;
             }
-
-            Self::draw_sprite(
-                self.quad_vao,
-                texture,
-                shader,
-                (x, y),
-                (size.0 as f32, size.1 as f32),
-                next_frame,
-            );
+            let info = ((x, y), (size.0 as f32, size.1 as f32), frame_index);
+            Self::draw_sprite(&mut target, sprite, self.render_set.as_ref().unwrap(), info);
         }
-        // self.debug_info(&game);
-        self.canvas.present();
+        target.finish().unwrap();
+        // let ctx: &mut egui::CtxRef = &mut egui_context;
+        // let raw: &egui::RawInput = &egui_raw_input;
+        // ctx.begin_frame(raw.clone());
+        // egui::Window::new("My Window").show(&ctx, |ui| {
+        //     ui.label("hello, world");
+        // });
+        // let (_output, shapes) = ctx.end_frame();
+        // let clipped_meshes = ctx.tessellate(shapes);
+        // unsafe {
+        //     let texture: &Texture = &egui_context.texture();
+        // }
+        // self.canvas.present();
         self.now = Instant::now();
+    }
+
+    fn setup(&mut self, world: &mut World) {
+        Self::SystemData::setup(world);
+        self.init_render_data(world);
     }
 }

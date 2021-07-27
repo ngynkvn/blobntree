@@ -54,6 +54,12 @@ impl Texture2D {
     }
 }
 
+impl From<egui::Texture> for Texture2D {
+    fn from(_texture: egui::Texture) -> Self {
+        Self { id: 0, info: None }
+    }
+}
+
 impl From<TextureInfo> for Texture2D {
     fn from(info: TextureInfo) -> Self {
         let path = &info.path;

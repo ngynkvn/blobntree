@@ -5,6 +5,7 @@ pub struct Game {
     pub render_ticks: usize,
     pub start_system_time: Instant,
     pub running: bool,
+    pub time: Instant,
 }
 
 impl Default for Game {
@@ -14,6 +15,7 @@ impl Default for Game {
             render_ticks: 0,
             start_system_time: Instant::now(),
             running: true,
+            time: Instant::now(),
         }
     }
 }

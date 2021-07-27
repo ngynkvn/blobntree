@@ -1,6 +1,6 @@
 use crate::systems::components::Collision;
 use crate::Size;
-use specs::Entity;
+use specs::prelude::*;
 
 use crate::systems::components::SpriteHandle;
 use sdl2::rect::Rect;
@@ -69,5 +69,9 @@ impl<'a> System<'a> for Physics {
                 ];
             }
         }
+    }
+
+    fn setup(&mut self, world: &mut World) {
+        Self::SystemData::setup(world);
     }
 }

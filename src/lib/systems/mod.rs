@@ -6,6 +6,7 @@ pub mod components;
 pub mod input;
 pub mod physics;
 pub mod renderer;
+// pub mod egui;
 
 #[macro_export]
 macro_rules! lif {
