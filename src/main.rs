@@ -1,177 +1,167 @@
-mod lib;
-extern crate sdl2;
-
-use crate::ecs::Component;
-use crate::ecs::Entity;
-use crate::ecs::System;
-use crate::ecs::World;
-use crate::font::FontConfig;
-use crate::state::PlayerState;
-use crate::systems::InputHandler;
-use crate::systems::InputSystem;
-use crate::systems::Physics;
-use crate::systems::Position;
-use crate::systems::SpriteState;
-use crate::systems::Velocity;
-use sdl2::image::{self, InitFlag, LoadTexture};
-use std::collections::HashSet;
-use std::iter::FromIterator;
-
-use sdl2::pixels::Color;
-use sdl2::rect::{Point, Rect};
-use sdl2::render::{Texture, WindowCanvas};
-use sdl2::render::{TextureCreator, TextureQuery};
-use sdl2::video::WindowContext;
-
 use std::collections::HashMap;
 use std::time::Duration;
 use std::time::Instant;
+use systems::components::CollisionType::Static;
+use systems::components::Size;
+use winit::window::WindowBuilder;
 
-use font::FontManager;
-use input::handle_input;
+use specs::prelude::*;
+
+use game::Game;
+
+use lib::logging::DisplayError;
 use lib::*;
-use misc::to_string;
-use sprite::Sprite;
-use std::any::TypeId;
-use systems::Renderer;
+use systems::components::InputHandler;
+use systems::components::Position;
+use systems::components::Velocity;
+use systems::input::InputSystem;
+use systems::physics::Physics;
+use systems::renderer::Renderer;
 
-use crate::lib::sprite::{SpriteConfig, SpriteManager};
+use opengl::DisplayBuild;
+use sprite::{SpriteConfig, SpriteManager};
+use systems::components::Collision;
 
-fn type_id<T: 'static>() -> TypeId {
-    TypeId::of::<T>()
+mod game;
+mod lib;
+
+#[macro_use]
+extern crate lazy_static;
+extern crate image;
+extern crate sdl2;
+#[macro_use]
+extern crate prettytable;
+extern crate nalgebra_glm as glm;
+
+use color_eyre::Result;
+
+pub fn main() -> Result<()> {
+    color_eyre::install()?;
+    // winit_main()
+    sdl_main()
 }
 
-pub struct Game {
-    player: PlayerState,
-    ticks: usize,
-    render_ticks: usize,
-    start_system_time: Instant,
-    running: bool,
+pub fn winit_main() -> Result<()> {
+    // Always include backtrace on panic.
+    std::env::set_var("RUST_BACKTRACE", "1");
+    let event_loop = winit::event_loop::EventLoop::new();
+    let _window = WindowBuilder::new()
+        .with_title("winit")
+        .with_inner_size(winit::dpi::LogicalSize::new(800.0, 600.0))
+        .build(&event_loop)?;
+    event_loop.run(move |_event, _, _control_flow| {});
+    Ok(())
 }
 
-impl Game {
-    fn update(&mut self) {
-        self.player.update();
-    }
-}
+pub fn sdl_main() -> Result<()> {
+    // Always include backtrace on panic.
+    std::env::set_var("RUST_BACKTRACE", "1");
+    let sdl_context = sdl2::init().map_err(DisplayError::from)?;
+    let video_subsystem = sdl_context.video().map_err(DisplayError::from)?;
 
-pub fn main() -> Result<(), String> {
-    let sdl_context = sdl2::init()?;
-    let video_subsystem = sdl_context.video()?;
+    let _ttf_context = sdl2::ttf::init()?;
 
-    let ttf_context = sdl2::ttf::init().map_err(|e| e.to_string())?;
-    let _image_context = image::init(InitFlag::PNG | InitFlag::JPG)?;
+    let gl_attr = video_subsystem.gl_attr();
+
+    let egui = egui::CtxRef::default();
+    gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
+    // gl_attr.set_context_flags().forward_compatible().set();
+    gl_attr.set_context_version(3, 3);
 
     let window = video_subsystem
         .window("rust-sdl2 demo: Video", 800, 600)
-        .position_centered()
-        .opengl()
-        .build()
-        .map_err(to_string)?;
+        .build_glium()
+        .unwrap();
 
-    let mut canvas = window.into_canvas().build().map_err(to_string)?;
+    // let raw = egui::RawInput {
+    //     screen_rect: Some(Rect::from_two_pos(
+    //         Default::default(),
+    //         Pos2::new(800f32, 600f32),
+    //     )),
+    //     pixels_per_point: Some(
+    //         video_subsystem
+    //             .display_dpi(window.display_index().unwrap())
+    //             .unwrap()
+    //             .1,
+    //     ),
+    //     ..Default::default()
+    // };
 
-    let texture_creator = canvas.texture_creator();
+    let mut event_pump = sdl_context.event_pump().map_err(DisplayError::from)?;
 
-    let mut sprite_manager = SpriteManager::new(&texture_creator);
-    sprite_manager.add(SpriteConfig {
-        name: "chicken",
-        path: "sprites/chicken_smear.png",
-        json: "sprites/chicken_smear.json",
-    });
-
-    sprite_manager.add(SpriteConfig {
-        name: "mushroom",
-        path: "sprites/mushroom.png",
-        json: "sprites/mushroom.json",
-    });
-
-    canvas.set_draw_color(Color::RGB(255, 0, 0));
-    canvas.clear();
-    canvas.present();
-
-    let mut event_pump = sdl_context.event_pump()?;
-
-    // Load a font TODO
-    let mut font_manager = FontManager::new(&texture_creator, &ttf_context);
-    font_manager.add(FontConfig {
-        path: "joystix monospace.ttf",
-        size: 16,
-        style: sdl2::ttf::FontStyle::BOLD,
-    });
+    let mut sprite_manager = SpriteManager::new();
 
     // Initial game time.
     let start_system_time = Instant::now();
     let mut next_tick = start_system_time;
 
-    let mut game = Game {
-        player: PlayerState::new(),
+    let game = Game {
         ticks: 0,
         render_ticks: 0,
         start_system_time,
         running: true,
+        time: start_system_time,
     };
 
     let mut world = World::new();
-    let mut player_input = InputSystem {
-        event_pump: &mut event_pump,
-    };
+
+    let mut player_input = InputSystem::new(&mut event_pump);
+    RunNow::setup(&mut player_input, &mut world);
 
     let mut physics: Physics = Default::default();
+    RunNow::setup(&mut physics, &mut world);
 
     let mut renderer = Renderer {
         sprite_manager: &mut sprite_manager,
-        canvas: &mut canvas,
-        now: Instant::now(),
+        window,
+        render_set: None,
+        now: start_system_time,
     };
+    RunNow::setup(&mut renderer, &mut world);
+    // renderer.prep();
 
-    world.register::<Position>();
-    world.register::<Velocity>();
-    world.register::<InputHandler>();
-    world.register::<SpriteState>();
-
+    world.insert(game);
+    world.insert(egui);
+    // world.insert(raw);
 
     world
         .create_entity()
-        .with(Velocity(0, 1))
-        .with(Position(600, 600))
-        .with(SpriteState(renderer.sprite_manager.init("mushroom")))
-        .with(InputHandler)
+        .with(Velocity(0, 0))
+        .with(Position(50, 50))
+        .with(Size(18 * 3, 18 * 3))
+        .with(renderer.sprite_manager.init("chicken"))
+        .with(InputHandler(None))
+        .with(Collision(None))
         .build();
 
-    for x in 0..20 {
-        for y in 0..10 {
+    for x in 1..10 {
+        for y in 1..10 {
             world
                 .create_entity()
                 .with(Velocity(0, 1))
-                .with(Position(x * 50, y * 50))
-                .with(SpriteState(renderer.sprite_manager.init("chicken")))
+                .with(Position(x * 18, y * 18))
+                .with(Size(18, 18))
+                .with(Collision(None))
+                .with(renderer.sprite_manager.init("chicken"))
                 .build();
         }
     }
 
-    /**
-    // world::register<InputHandler>();
-
-        // .with(InputHandler())
-        .build()
-    loop {
-        world.run_system(InputHandler);
-        world.run_system(UpdateGame);
-        world.run_system(RenderGame);
+    for x in 0..20 {
+        world
+            .create_entity()
+            .with(Position(x * 32, 400))
+            .with(Size(32, 32))
+            .with(renderer.sprite_manager.init("tile"))
+            .with(Collision(Some(Static)))
+            .build();
     }
-
-     */
     // render a surface, and convert it to a texture bound to the canvas
     let mut now = Instant::now();
-    let frame_time = Duration::from_secs_f64(1.0 / 60.0);
+    let _frame_time = Duration::from_secs_f64(1.0 / 60.0);
     loop {
-        handle_input(&mut game, &mut event_pump);
-        // world.run_system(
-        //     &mut player_input,
-        //     &[type_id::<Velocity>(), type_id::<InputHandler>()],
-        // );
-        if !game.running {
+        player_input.run_now(&world);
+        if !player_input.running {
             break;
         }
 
@@ -182,44 +172,17 @@ pub fn main() -> Result<(), String> {
         let skip_ticks: Duration = Duration::from_millis(1000 / TICKS_PER_SECOND);
         let mut loops = 0;
         while Instant::now() > next_tick && loops < MAX_FRAMESKIP {
-            world.run_system(
-                &mut physics,
-                &[type_id::<Position>(), type_id::<Velocity>()],
-            );
+            physics.run_now(&world);
             //tick counter
             next_tick += skip_ticks;
             loops += 1;
+            let mut game = world.write_resource::<Game>();
             game.ticks += 1;
         }
-        world.run_system(
-            &mut renderer,
-            &[type_id::<Position>(), type_id::<SpriteState>()],
-        );
-        println!("{:?}", Instant::now() - now);
+        renderer.run_now(&world);
+
+        let mut game = world.write_resource::<Game>();
         game.render_ticks += 1;
-
-        let total_elapsed = (Instant::now() - start_system_time).as_secs_f32();
-        let fps_game = game.ticks as f32 / total_elapsed;
-        let fps_render = game.render_ticks as f32 / total_elapsed;
-        println!(
-            "{}",
-            format!(
-                "StateFPS: [{:02.1}] RenderFPS: [{:02.1}] T: {:02.2}",
-                fps_game, fps_render, total_elapsed
-            )
-        );
-
-        // if let Some(debug) = font_manager.render(
-        //     "joystix monospace.ttf",
-        //     &format!(
-        //         "StateFPS: [{:02.1}] RenderFPS: [{:02.1}] T: {:02.2}",
-        //         fps_game, fps_render, total_elapsed
-        //     ),
-        // ) {
-        //     render_debug(&mut game, &mut canvas, &debug);
-        // }
-
-        // canvas.present();
 
         std::thread::sleep(
             Duration::from_secs_f64(1.0 / 62.0)

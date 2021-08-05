@@ -1,8 +1,6 @@
-pub mod aesprite;
-pub mod ecs;
-pub mod font;
-pub mod input;
-pub mod misc;
+pub mod aseprite;
+pub mod logging;
+pub mod opengl;
+// pub mod ecs; RIP.
 pub mod sprite;
-pub mod state;
 pub mod systems;

@@ -1,111 +1,111 @@
 { "frames": [
    {
-    "filename": "peck0",
-    "frame": { "x": 0, "y": 0, "w": 16, "h": 17 },
+    "filename": "chicken_smear 0.aseprite",
+    "frame": { "x": 0, "y": 0, "w": 18, "h": 18 },
     "rotated": false,
-    "trimmed": true,
-    "spriteSourceSize": { "x": 0, "y": 1, "w": 16, "h": 17 },
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 18, "h": 18 },
     "sourceSize": { "w": 18, "h": 18 },
     "duration": 200
    },
    {
-    "filename": "peck1",
-    "frame": { "x": 16, "y": 0, "w": 16, "h": 17 },
+    "filename": "chicken_smear 1.aseprite",
+    "frame": { "x": 18, "y": 0, "w": 18, "h": 18 },
     "rotated": false,
-    "trimmed": true,
-    "spriteSourceSize": { "x": 0, "y": 1, "w": 16, "h": 17 },
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 18, "h": 18 },
     "sourceSize": { "w": 18, "h": 18 },
     "duration": 50
    },
    {
-    "filename": "peck2",
-    "frame": { "x": 32, "y": 0, "w": 16, "h": 17 },
+    "filename": "chicken_smear 2.aseprite",
+    "frame": { "x": 36, "y": 0, "w": 18, "h": 18 },
     "rotated": false,
-    "trimmed": true,
-    "spriteSourceSize": { "x": 0, "y": 1, "w": 16, "h": 17 },
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 18, "h": 18 },
     "sourceSize": { "w": 18, "h": 18 },
     "duration": 50
    },
    {
-    "filename": "peck3",
-    "frame": { "x": 48, "y": 0, "w": 16, "h": 17 },
+    "filename": "chicken_smear 3.aseprite",
+    "frame": { "x": 54, "y": 0, "w": 18, "h": 18 },
     "rotated": false,
-    "trimmed": true,
-    "spriteSourceSize": { "x": 0, "y": 1, "w": 16, "h": 17 },
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 18, "h": 18 },
     "sourceSize": { "w": 18, "h": 18 },
     "duration": 50
    },
    {
-    "filename": "peck4",
-    "frame": { "x": 48, "y": 0, "w": 16, "h": 17 },
+    "filename": "chicken_smear 4.aseprite",
+    "frame": { "x": 72, "y": 0, "w": 18, "h": 18 },
     "rotated": false,
-    "trimmed": true,
-    "spriteSourceSize": { "x": 0, "y": 1, "w": 16, "h": 17 },
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 18, "h": 18 },
     "sourceSize": { "w": 18, "h": 18 },
     "duration": 200
    },
    {
-    "filename": "peck5",
-    "frame": { "x": 64, "y": 0, "w": 16, "h": 17 },
+    "filename": "chicken_smear 5.aseprite",
+    "frame": { "x": 90, "y": 0, "w": 18, "h": 18 },
     "rotated": false,
-    "trimmed": true,
-    "spriteSourceSize": { "x": 0, "y": 1, "w": 16, "h": 17 },
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 18, "h": 18 },
     "sourceSize": { "w": 18, "h": 18 },
     "duration": 50
    },
    {
-    "filename": "run0",
-    "frame": { "x": 0, "y": 17, "w": 16, "h": 17 },
+    "filename": "chicken_smear 6.aseprite",
+    "frame": { "x": 108, "y": 0, "w": 18, "h": 18 },
     "rotated": false,
-    "trimmed": true,
-    "spriteSourceSize": { "x": 0, "y": 1, "w": 16, "h": 17 },
-    "sourceSize": { "w": 18, "h": 18 },
-    "duration": 100
-   },
-   {
-    "filename": "run1",
-    "frame": { "x": 16, "y": 17, "w": 16, "h": 17 },
-    "rotated": false,
-    "trimmed": true,
-    "spriteSourceSize": { "x": 0, "y": 1, "w": 16, "h": 17 },
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 18, "h": 18 },
     "sourceSize": { "w": 18, "h": 18 },
     "duration": 50
    },
    {
-    "filename": "run2",
-    "frame": { "x": 32, "y": 17, "w": 16, "h": 17 },
+    "filename": "chicken_smear 7.aseprite",
+    "frame": { "x": 126, "y": 0, "w": 18, "h": 18 },
     "rotated": false,
-    "trimmed": true,
-    "spriteSourceSize": { "x": 0, "y": 1, "w": 16, "h": 17 },
-    "sourceSize": { "w": 18, "h": 18 },
-    "duration": 100
-   },
-   {
-    "filename": "run3",
-    "frame": { "x": 48, "y": 17, "w": 16, "h": 17 },
-    "rotated": false,
-    "trimmed": true,
-    "spriteSourceSize": { "x": 0, "y": 1, "w": 16, "h": 17 },
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 18, "h": 18 },
     "sourceSize": { "w": 18, "h": 18 },
     "duration": 50
    },
    {
-    "filename": "run4",
-    "frame": { "x": 64, "y": 17, "w": 16, "h": 17 },
+    "filename": "chicken_smear 8.aseprite",
+    "frame": { "x": 144, "y": 0, "w": 18, "h": 18 },
     "rotated": false,
-    "trimmed": true,
-    "spriteSourceSize": { "x": 0, "y": 1, "w": 16, "h": 17 },
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 18, "h": 18 },
+    "sourceSize": { "w": 18, "h": 18 },
+    "duration": 50
+   },
+   {
+    "filename": "chicken_smear 9.aseprite",
+    "frame": { "x": 162, "y": 0, "w": 18, "h": 18 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 18, "h": 18 },
+    "sourceSize": { "w": 18, "h": 18 },
+    "duration": 50
+   },
+   {
+    "filename": "chicken_smear 10.aseprite",
+    "frame": { "x": 180, "y": 0, "w": 18, "h": 18 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 18, "h": 18 },
     "sourceSize": { "w": 18, "h": 18 },
     "duration": 100
    },
    {
-    "filename": "run5",
-    "frame": { "x": 80, "y": 17, "w": 16, "h": 17 },
+    "filename": "chicken_smear 11.aseprite",
+    "frame": { "x": 198, "y": 0, "w": 18, "h": 18 },
     "rotated": false,
-    "trimmed": true,
-    "spriteSourceSize": { "x": 0, "y": 1, "w": 16, "h": 17 },
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 18, "h": 18 },
     "sourceSize": { "w": 18, "h": 18 },
-    "duration": 100
+    "duration": 50
    }
  ],
  "meta": {
@@ -113,12 +113,15 @@
   "version": "1.x-dev",
   "image": "chicken_smear.png",
   "format": "RGBA8888",
-  "size": { "w": 96, "h": 34 },
+  "size": { "w": 216, "h": 18 },
   "scale": "1",
   "frameTags": [
-   { "name": "still", "from": 0, "to": 0, "direction": "forward" },
    { "name": "peck", "from": 0, "to": 5, "direction": "forward" },
+   { "name": "still", "from": 0, "to": 0, "direction": "forward" },
    { "name": "run", "from": 6, "to": 11, "direction": "forward" }
+  ],
+  "layers": [
+   { "name": "Layer 1", "opacity": 255, "blendMode": "normal" }
   ],
   "slices": [
   ]

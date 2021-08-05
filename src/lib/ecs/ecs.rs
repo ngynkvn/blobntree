@@ -1,8 +1,17 @@
-use core::marker::PhantomData;
-use crate::HashSet;
-use core::mem::take;
 use crate::HashMap;
+use crate::HashSet;
 use core::any::Any;
+/**
+ * This was my attempt at an entity component system using the techniques described in
+ * Catherine West's closing keynote at Rust Conf 2018.
+ *
+ * It's a great talk about game development and rust that I high recommend to anyone interested.
+ * (Closing Keynote - Using Rust For Game Development, Catherine West)
+ * Video: https://www.youtube.com/watch?v=aKLntZcp27M
+ * Blog Post: https://kyren.github.io/2018/09/14/rustconf-talk.html
+ */
+use core::marker::PhantomData;
+use core::mem::take;
 use std::any::TypeId;
 use std::iter::FromIterator;
 
@@ -10,8 +19,7 @@ type SystemId = TypeId;
 type EntityId = u64;
 type ComponentMap = HashMap<SystemId, Box<dyn Any>>;
 
-pub trait Component: Any {
-}
+pub trait Component: Any {}
 
 impl Component for () {}
 
@@ -22,7 +30,9 @@ pub struct EntityBuilder<'a> {
 
 impl<'a> EntityBuilder<'a> {
     pub fn with<C: Component>(&mut self, component: C) -> &mut Self {
-        self.entity.components.insert(TypeId::of::<C>(), Box::new(component));
+        self.entity
+            .components
+            .insert(TypeId::of::<C>(), Box::new(component));
         self
     }
     pub fn build(&mut self) {
@@ -44,7 +54,6 @@ impl<'a> Entity {
         let component = self.components.get(&TypeId::of::<T>()).unwrap();
         let component = component.downcast_ref();
         component.unwrap()
-
     }
 
     pub fn set<T: Component>(&'a mut self, value: T) {
@@ -62,7 +71,6 @@ pub struct World {
     incr_id: EntityId,
 }
 
-
 // System
 
 pub trait System {
@@ -75,16 +83,16 @@ impl<'a> World {
     }
 
     pub fn register<T: 'static>(&mut self) {
-        self.component_types.insert(TypeId::of::<T>(), self.component_incr);
+        self.component_types
+            .insert(TypeId::of::<T>(), self.component_incr);
         self.component_incr += 1;
     }
-
 
     fn new_entity(&mut self) -> Entity {
         let e = Entity {
             id: self.incr_id,
             component_types: HashSet::new(),
-            components: HashMap::new()
+            components: HashMap::new(),
         };
         self.incr_id += 1;
         e
@@ -99,12 +107,12 @@ impl<'a> World {
     }
 
     pub fn run_system<'b, S>(&'b mut self, system: &mut S, components: &[TypeId])
-    where S: System {
+    where
+        S: System,
+    {
         let set = HashSet::from_iter(components.iter().cloned());
         let i = self.entities.iter_mut();
-        let matches = i.filter(|entity| {
-            entity.component_types.is_superset(&set)
-        });
+        let matches = i.filter(|entity| entity.component_types.is_superset(&set));
         system.update(matches)
     }
 }
