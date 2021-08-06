@@ -25,6 +25,9 @@ impl SDL2Facade {
             self.backend.get_framebuffer_dimensions(),
         )
     }
+    pub fn display_index(&self) -> Result<i32, String> {
+        self.backend.window.display_index()
+    }
 }
 pub struct SDL2Backend {
     window: sdl2_video::Window,

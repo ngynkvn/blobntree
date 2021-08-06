@@ -1,3 +1,5 @@
+use egui::Pos2;
+use egui::Rect;
 use std::collections::HashMap;
 use std::time::Duration;
 use std::time::Instant;
