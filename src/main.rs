@@ -20,7 +20,7 @@ use systems::input::InputSystem;
 use systems::physics::Physics;
 use systems::renderer::Renderer;
 
-use opengl::DisplayBuild;
+use glium_glue::sdl2::DisplayBuild;
 use sprite::{SpriteConfig, SpriteManager};
 use systems::components::Collision;
 

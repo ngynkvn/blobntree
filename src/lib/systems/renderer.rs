@@ -1,8 +1,8 @@
 use crate::aseprite::AsepriteJSON;
 use crate::aseprite::SpriteRect;
 
-use crate::lib::opengl::SDL2Facade;
 use crate::lib::sprite::Sprite;
+use glium_glue::sdl2::SDL2Facade;
 
 use glium::implement_vertex;
 use glium::index::PrimitiveType;
