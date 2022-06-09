@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 use std::time::Instant;
-use systems::components::CollisionType::Static;
+use systems::components::CollisionType::*;
 use systems::components::Size;
 use winit::window::WindowBuilder;
 
@@ -20,7 +20,7 @@ use systems::renderer::Renderer;
 
 use opengl::DisplayBuild;
 use sprite::{SpriteConfig, SpriteManager};
-use systems::components::Collision;
+use systems::components::Shape;
 
 mod game;
 mod lib;
@@ -131,7 +131,7 @@ pub fn sdl_main() -> Result<()> {
         .with(Size(18 * 3, 18 * 3))
         .with(renderer.sprite_manager.init("chicken"))
         .with(InputHandler(None))
-        .with(Collision(None))
+        .with(Shape(Weighted))
         .build();
 
     for x in 1..10 {
@@ -141,7 +141,7 @@ pub fn sdl_main() -> Result<()> {
                 .with(Velocity(0, 1))
                 .with(Position(x * 18, y * 18))
                 .with(Size(18, 18))
-                .with(Collision(None))
+                .with(Shape(Weighted))
                 .with(renderer.sprite_manager.init("chicken"))
                 .build();
         }
@@ -153,7 +153,7 @@ pub fn sdl_main() -> Result<()> {
             .with(Position(x * 32, 400))
             .with(Size(32, 32))
             .with(renderer.sprite_manager.init("tile"))
-            .with(Collision(Some(Static)))
+            .with(Shape(Static))
             .build();
     }
     // render a surface, and convert it to a texture bound to the canvas

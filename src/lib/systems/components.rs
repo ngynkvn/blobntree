@@ -28,7 +28,8 @@ pub struct InputHandler(pub Option<InputState>);
 
 pub enum CollisionType {
     Static,
+    Weighted
 }
 
 #[derive(Component)]
-pub struct Collision(pub Option<CollisionType>);
+pub struct Shape(pub CollisionType);

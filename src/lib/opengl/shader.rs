@@ -147,10 +147,9 @@ macro_rules! gl_arg {
                     let cstr = CString::new(name).unwrap();
                     let gl_uniform_location = gl::GetUniformLocation(id, cstr.as_ptr() as *const _);
                     // $(dbg!(self.$e);)*
-                    if(gl_uniform_location == -1) {
-                        eprintln!("ERR: gl::GetUniformLocation for {:?} was not found. Silently ignoring.", cstr);
-                    } else {
-                        $call(
+                    match gl_uniform_location {
+                        -1 => eprintln!("ERR: gl::GetUniformLocation for {:?} was not found. Silently ignoring.", cstr),
+                        _ => $call(
                             gl_uniform_location,
                             $(self.$e,)*
                         )
